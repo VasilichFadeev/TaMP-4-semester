@@ -68,8 +68,14 @@ public class Main extends Application {
         scene.setOnKeyPressed(event -> {
             switch (event.getCode()) {
                 case B -> startSimulation();
-                case E -> stopSimulation();
-                case T -> showTime = !showTime;
+                case E -> {
+                    statsText.setVisible(true);
+                    stopSimulation();
+                }
+                case T -> {
+                    showTime = !showTime;
+                    statsText.setVisible(showTime);
+                }
             }
         });
 
@@ -146,10 +152,13 @@ public class Main extends Application {
         }
     }
 
+    double time_counter = 0;
+
     private void updateUI(long now) {
         if (showTime) {
             double elapsedSeconds = (now - simulationStartTime) / 1e9;
             statsText.setText(String.format("Time: %.1f s", elapsedSeconds));
+            time_counter = elapsedSeconds;
         }
     }
 
@@ -158,7 +167,7 @@ public class Main extends Application {
         long oils = habitat.getObjects().stream().filter(obj -> obj instanceof Oil).count();
         statsText.setFill(Color.RED);
         statsText.setFont(Font.font("Arial", FontWeight.BOLD, 16));
-        statsText.setText(String.format("Cars: %d\nOils: %d", cars, oils));
+        statsText.setText(String.format("Time: %.1f s\nCars: %d\nOils: %d", time_counter, cars, oils));
     }
 
     private void spawnCars(long now) {
