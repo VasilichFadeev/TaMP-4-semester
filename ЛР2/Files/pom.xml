@@ -67,7 +67,7 @@
         <artifactId>javafx-maven-plugin</artifactId>
         <version>0.0.8</version>
         <configuration>
-          <mainClass>org.example.laba_1.Main</mainClass>
+          <mainClass>org.example.laba_2.Main</mainClass>
         </configuration>
       </plugin>
     </plugins>
