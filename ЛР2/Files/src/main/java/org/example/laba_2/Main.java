@@ -56,6 +56,15 @@ public class Main extends Application {
     private long lastOilSpawnTime = 0;
     private double time_counter = 0;
 
+    // Элементы меню и панели инструментов
+    private MenuItem startMenuItem;
+    private MenuItem stopMenuItem;
+    private CheckMenuItem showTimeMenuItem;
+    private CheckMenuItem showInfoMenuItem;
+    private ToggleButton toolbarStartButton;
+    private ToggleButton toolbarShowTimeButton;
+    private ToggleButton toolbarShowInfoButton;
+
     @Override
     public void start(Stage stage) {
         int x_size = 870;
@@ -78,8 +87,8 @@ public class Main extends Application {
 
         // Меню "Файл"
         Menu fileMenu = new Menu("Файл");
-        MenuItem startMenuItem = new MenuItem("Старт");
-        MenuItem stopMenuItem = new MenuItem("Стоп");
+        startMenuItem = new MenuItem("Старт");
+        stopMenuItem = new MenuItem("Стоп");
         MenuItem exitMenuItem = new MenuItem("Выход");
 
         startMenuItem.setOnAction(e -> startSimulationFromMenu());
@@ -100,11 +109,11 @@ public class Main extends Application {
 
         // Меню "Вид"
         Menu viewMenu = new Menu("Вид");
-        CheckMenuItem showTimeMenuItem = new CheckMenuItem("Показывать время");
+        showTimeMenuItem = new CheckMenuItem("Показывать время");
         showTimeMenuItem.setSelected(showTime);
         showTimeMenuItem.setOnAction(e -> toggleShowTime());
 
-        CheckMenuItem showInfoMenuItem = new CheckMenuItem("Показывать информацию при остановке");
+        showInfoMenuItem = new CheckMenuItem("Показывать информацию при остановке");
         showInfoMenuItem.setSelected(showInfoDialog);
         showInfoMenuItem.setOnAction(e -> toggleShowInfoDialog());
 
@@ -115,14 +124,14 @@ public class Main extends Application {
         // Панель инструментов (ToolBar)
         ToolBar toolBar = new ToolBar();
 
-        ToggleButton toolbarStartButton = new ToggleButton("▶");
+        toolbarStartButton = new ToggleButton("▶");
 
         Image end_button = new Image(getClass().getResourceAsStream("/malevich_square.png"), 12, 12, true, true);
         Button toolbarEndButton = new Button();
         toolbarEndButton.setGraphic(new ImageView(end_button));
 
-        ToggleButton toolbarShowTimeButton = new ToggleButton("⏱");
-        ToggleButton toolbarShowInfoButton = new ToggleButton("ℹ");
+        toolbarShowTimeButton = new ToggleButton("⏱");
+        toolbarShowInfoButton = new ToggleButton("ℹ");
 
         toolbarStartButton.setOnAction(e -> startSimulationFromMenu());
         toolbarEndButton.setOnAction(e -> stopSimulationFromMenu());
@@ -215,6 +224,8 @@ public class Main extends Application {
         timeToggle.selectedToggleProperty().addListener((obs, oldVal, newVal) -> {
             showTime = (newVal == showTimeRadio);
             statsText.setVisible(showTime);
+            showTimeMenuItem.setSelected(showTime);
+            toolbarShowTimeButton.setSelected(showTime);
 
             if (showTime && pauseTime > 0) {
                 simulationStartTime = System.nanoTime() - (pauseTime - simulationStartTime);
@@ -233,31 +244,33 @@ public class Main extends Application {
         Scene scene = new Scene(root, x_size, y_size);
         startButton = new Button("Старт");
         stopButton = new Button("Стоп");
-        stopButton.setDisable(true);
 
         showInfoCheckBox = new CheckBox("Показывать информацию при остановке");
         showInfoCheckBox.setSelected(showInfoDialog);
+
+        // Привязка состояний элементов
+        startMenuItem.disableProperty().bind(startButton.disabledProperty());
+        stopMenuItem.disableProperty().bind(stopButton.disabledProperty());
+        toolbarStartButton.disableProperty().bind(startButton.disabledProperty());
 
         scene.setOnKeyPressed(event -> {
             switch (event.getCode()) {
                 case B -> {
                     if (!isSimulationRunning) {
                         startSimulation();
-                        startButton.setDisable(true);
-                        stopButton.setDisable(false);
                     }
                 }
                 case E -> {
                     if (isSimulationRunning) {
                         statsText.setVisible(true);
                         stopSimulation();
-                        startButton.setDisable(false);
-                        stopButton.setDisable(true);
                     }
                 }
                 case T -> {
                     showTime = !showTime;
                     statsText.setVisible(showTime);
+                    showTimeMenuItem.setSelected(showTime);
+                    toolbarShowTimeButton.setSelected(showTime);
 
                     if (showTime) {
                         if (pauseTime > 0) {
@@ -272,25 +285,24 @@ public class Main extends Application {
             }
         });
 
-        startButton.setOnAction(e -> {
-            startSimulation();
-            startButton.setDisable(true);
-            stopButton.setDisable(false);
-        });
-
+        startButton.setOnAction(e -> startSimulation());
         stopButton.setOnAction(e -> {
             statsText.setVisible(true);
             stopSimulation();
-            startButton.setDisable(false);
-            stopButton.setDisable(true);
         });
+
         controlPanel.getChildren().addAll(startButton, stopButton);
 
         showInfoCheckBox.selectedProperty().addListener((obs, oldVal, newVal) -> {
             showInfoDialog = newVal;
+            showInfoMenuItem.setSelected(newVal);
+            toolbarShowInfoButton.setSelected(newVal);
         });
 
         controlPanel.getChildren().add(showInfoCheckBox);
+
+        // Инициализация состояний кнопок
+        updateButtonStates();
 
         var timer = new AnimationTimer() {
             @Override
@@ -310,6 +322,12 @@ public class Main extends Application {
         stage.setScene(scene);
         stage.setResizable(false);
         stage.show();
+    }
+
+    private void updateButtonStates() {
+        startButton.setDisable(isSimulationRunning);
+        stopButton.setDisable(!isSimulationRunning);
+        toolbarStartButton.setSelected(isSimulationRunning);
     }
 
     private void loadSounds() {
@@ -350,6 +368,7 @@ public class Main extends Application {
                 ((Car) obj).initEngineSound();
             }
         }
+        updateButtonStates();
     }
 
     private void stopSimulation() {
@@ -367,6 +386,7 @@ public class Main extends Application {
                 ((Car) obj).stopEngineSound();
             }
         }
+        updateButtonStates();
     }
 
     private void modalDialog() {
@@ -403,9 +423,6 @@ public class Main extends Application {
                     }
                 }
             } else {
-                isSimulationRunning = true;
-                startButton.setDisable(true);
-                stopButton.setDisable(false);
                 continueSimulation();
             }
         });
@@ -418,6 +435,7 @@ public class Main extends Application {
                 ((Car) obj).initEngineSound();
             }
         }
+        updateButtonStates();
     }
 
     private void updateUI(long now) {
@@ -515,26 +533,26 @@ public class Main extends Application {
         }
     }
 
-    // === Методы для работы с меню ===
+    // Методы для работы с меню
     private void startSimulationFromMenu() {
         if (!isSimulationRunning) {
             startSimulation();
-            startButton.setDisable(true);
-            stopButton.setDisable(false);
         }
     }
 
     private void stopSimulationFromMenu() {
         if (isSimulationRunning) {
             stopSimulation();
-            startButton.setDisable(false);
-            stopButton.setDisable(true);
         }
     }
 
     private void toggleShowTime() {
         showTime = !showTime;
         statsText.setVisible(showTime);
+        showTimeMenuItem.setSelected(showTime);
+        toolbarShowTimeButton.setSelected(showTime);
+        timeToggle.selectToggle(showTime ? showTimeRadio : hideTimeRadio);
+
         if (showTime) {
             if (pauseTime > 0) {
                 simulationStartTime = System.nanoTime() - (pauseTime - simulationStartTime);
@@ -543,12 +561,13 @@ public class Main extends Application {
         } else {
             pauseTime = System.nanoTime();
         }
-        timeToggle.selectToggle(showTime ? showTimeRadio : hideTimeRadio);
     }
 
     private void toggleShowInfoDialog() {
         showInfoDialog = !showInfoDialog;
         showInfoCheckBox.setSelected(showInfoDialog);
+        showInfoMenuItem.setSelected(showInfoDialog);
+        toolbarShowInfoButton.setSelected(showInfoDialog);
     }
 
     private void showSpawnIntervalsDialog() {
@@ -579,7 +598,6 @@ public class Main extends Application {
                     carSpawnIntervalField.setText(carIntervalField.getText());
                     oilSpawnIntervalField.setText(oilIntervalField.getText());
                 } catch (NumberFormatException e) {
-                    // Обработка ошибки ввода
                 }
             }
         });
