@@ -207,15 +207,7 @@ public class Main extends Application {
 
         habitat = Habitat.getInstance(objectPane, x_kutuzka_size, y_kutuzka_size);
         loadSounds();
-
-        Button currentObjectsButton = new Button("Текущие объекты");
-        currentObjectsButton.setOnAction(e -> {
-            CurrentObjectsDialog dialog = new CurrentObjectsDialog(habitat.getBirthTimeMap());
-            dialog.showAndWait();
-        });
-
-        controlPanel.getChildren().add(currentObjectsButton);
-
+        
         // Все поля
         controlPanel.getChildren().addAll(
                 new Separator(),
