@@ -59,5 +59,10 @@ public class CurrentObjectsDialog extends Dialog<Void> {
             this.id = id;
             this.birthTime = birthTime;
         }
+
+        // Геттеры для доступа к полям (используются PropertyValueFactory в TableColumn)
+        public String getType() { return type; }
+        public String getId() { return id; }
+        public String getBirthTime() { return birthTime; }
     }
 }
