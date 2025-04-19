@@ -70,10 +70,10 @@ public class Main extends Application {
 
     @Override
     public void start(Stage stage) {
-        int x_size = 800;
+        int x_size = 820;
         int y_size = 738;
-        int x_kutuzka_size = (480);
-        int y_kutuzka_size = (639);
+        int x_kutuzka_size = (500);
+        int y_kutuzka_size = (679);
 
         // Инициализация полей для жизни (продолжительности и интервалов рождения)
         carLifetimeField = new TextField(String.valueOf(CAR_LIFETIME / 1_000_000_000L));
@@ -104,20 +104,7 @@ public class Main extends Application {
             dialog.showAndWait();
         });
 
-        // Создание панели
-        HBox headerControls = new HBox(10);
-        headerControls.setPadding(new Insets(5));
-        headerControls.setAlignment(Pos.CENTER_LEFT);
-        headerControls.getChildren().addAll(
-                new Label("Время жизни (сек):"),
-                new Label("Машины:"), headerCarLifeField,
-                new Label("Масло:"), headerOilLifeField,
-                headerCurrentObjectsBtn
-        );
-
-
-
-        Image backgroundImage = new Image(getClass().getResourceAsStream("/background.png"), (x_size * 0.865), (y_size * 0.865), true, true);
+        Image backgroundImage = new Image(getClass().getResourceAsStream("/background.png"), (x_size * 0.92), (y_size * 0.92), true, true);
         ImageView backgroundImageView = new ImageView(backgroundImage);
 
         BorderPane root = new BorderPane();
@@ -193,7 +180,7 @@ public class Main extends Application {
         );
 
         // Добавление MenuBar, ToolBar наверх
-        VBox topContainer = new VBox(menuBar, toolBar, headerControls);
+        VBox topContainer = new VBox(menuBar, toolBar);
         root.setTop(topContainer);
 
         // Правая панель
@@ -207,6 +194,14 @@ public class Main extends Application {
 
         habitat = Habitat.getInstance(objectPane, x_kutuzka_size, y_kutuzka_size);
         loadSounds();
+
+
+        Button currentObjectsButton = new Button("Текущие объекты");
+        currentObjectsButton.setOnAction(e -> {
+            CurrentObjectsDialog dialog = new CurrentObjectsDialog(habitat.getBirthTimeMap());
+            dialog.showAndWait();
+        });
+        controlPanel.getChildren().add(currentObjectsButton);
         
         // Все поля
         controlPanel.getChildren().addAll(
