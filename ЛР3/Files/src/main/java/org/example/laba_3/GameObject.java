@@ -15,10 +15,7 @@ public abstract class GameObject implements IBehaviour {
         this.id = generateUniqueId();
     }
 
-    /**
-     * Генерирует уникальный идентификатор для объекта
-     * @return уникальный ID
-     */
+    // Генерирует уникальный идентификатор для объекта
     private int generateUniqueId() {
         int newId;
         do {
@@ -47,11 +44,7 @@ public abstract class GameObject implements IBehaviour {
         return id;
     }
 
-    /**
-     * Проверяет, истекло ли время жизни объекта
-     * @param currentTime текущее время симуляции в наносекундах
-     * @return true, если время жизни истекло
-     */
+    // Проверяет, истекло ли время жизни объекта
     public boolean isExpired(long currentTime) {
         return currentTime - birthTime >= lifetime;
     }
@@ -59,11 +52,7 @@ public abstract class GameObject implements IBehaviour {
     @Override
     public abstract void update(int maxWidth, int maxHeight);
 
-    /**
-     * Обрабатывает столкновение с границами области
-     * @param maxWidth максимальная ширина области
-     * @param maxHeight максимальная высота области
-     */
+    // Обрабатывает столкновение с границами области
     protected void checkBoundaryCollision(double maxWidth, double maxHeight) {
         double x = imageView.getX();
         double y = imageView.getY();
