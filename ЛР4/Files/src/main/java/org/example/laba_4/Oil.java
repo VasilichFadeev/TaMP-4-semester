@@ -1,0 +1,27 @@
+package org.example.laba_4;
+
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
+
+public class Oil extends GameObject {
+    public OilAI oilAI;
+
+    public Oil() {
+        Image image = new Image(getClass().getResourceAsStream("/oil.png"));
+        imageView = new ImageView(image);
+        imageView.setFitWidth(70);
+        imageView.setFitHeight(70);
+        imageView.setPreserveRatio(true);
+
+        speedX = 0.5 + Math.random();
+        speedY = 0.5 + Math.random();
+
+        oilAI = new OilAI(this);
+        oilAI.resumeAI();
+    }
+
+    @Override
+    public void update(int maxWidth, int maxHeight) {
+        checkBoundaryCollision(maxWidth, maxHeight);
+    }
+}
