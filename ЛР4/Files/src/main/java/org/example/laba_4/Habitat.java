@@ -19,6 +19,8 @@ public class    Habitat {
     private final int width;
     private final int height;
     private long simulationStartTime;
+    private final CarAI carAI = new CarAI();
+    private final OilAI oilAI = new OilAI();
 
     // Конструктор для реализации Singleton
     private Habitat(Pane pane, int width, int height) {
@@ -33,32 +35,20 @@ public class    Habitat {
     public void setSimulationPaused(boolean paused) {
         this.simulationPaused = paused;
         if (paused) {
-            stopAllAI();
+            carAI.pauseAI();
+            oilAI.pauseAI();
         } else {
-            resumeAllAI();
+            carAI.resumeAI();
+            oilAI.resumeAI();
         }
     }
 
-    public boolean isSimulationPaused() {
-        return simulationPaused;
+    public CarAI getCarAI() {
+        return carAI;
     }
 
-    public void resumeAllAI() {
-        for (GameObject obj : objects) {
-            if (obj instanceof Car) {
-                ((Car) obj).carAI.resumeAI();
-            } else if (obj instanceof Oil) {
-                ((Oil) obj).oilAI.resumeAI();
-            }
-        }
-    }
-
-    public boolean isPaused() {
-        return paused;
-    }
-
-    public void setPaused(boolean paused) {
-        this.paused = paused;
+    public OilAI getOilAI() {
+        return oilAI;
     }
 
     // Получение экземпляра класса с инициализацией параметров
@@ -157,65 +147,30 @@ public class    Habitat {
         return new TreeMap<>(birthTimeMap); // Возвращает копию TreeMap
     }
 
-    public void setSimulationStartTime(long simulationStartTime) {
-        this.simulationStartTime = simulationStartTime; // Установка времени начала симуляции
-    }
-
-    public int getObjectCount() {
-        return objects.size(); // Общее количество объектов
-    }
-
-    public int getCarCount() {
-        return (int) objects.stream().filter(obj -> obj instanceof Car).count(); // Количество машин
-    }
-
-    public int getOilCount() {
-        return (int) objects.stream().filter(obj -> obj instanceof Oil).count(); // Количество машин
-    }
-
     public void setCarAIPaused(boolean paused) {
-        for (GameObject obj : objects) {
-            if (obj instanceof Car) {
-                CarAI ai = ((Car) obj).carAI;
-                if (paused) ai.pauseAI();
-                else ai.resumeAI();
-            }
-        }
+        if (paused) carAI.pauseAI();
+        else carAI.resumeAI();
     }
 
     public void setCarAIPriority(int priority) {
-        for (GameObject obj : objects) {
-            if (obj instanceof Car && ((Car) obj).carAI.thread != null) {
-                ((Car) obj).carAI.thread.setPriority(priority);
-            }
+        if (carAI.thread != null) {
+            carAI.thread.setPriority(priority);
         }
     }
 
     public void setOilAIPaused(boolean paused) {
-        for (GameObject obj : objects) {
-            if (obj instanceof Oil) {
-                OilAI ai = ((Oil) obj).oilAI;
-                if (paused) ai.pauseAI();
-                else ai.resumeAI();
-            }
-        }
+        if (paused) oilAI.pauseAI();
+        else oilAI.resumeAI();
     }
 
     public void setOilAIPriority(int priority) {
-        for (GameObject obj : objects) {
-            if (obj instanceof Oil && ((Oil) obj).oilAI.thread != null) {
-                ((Oil) obj).oilAI.thread.setPriority(priority);
-            }
+        if (oilAI.thread != null) {
+            oilAI.thread.setPriority(priority);
         }
     }
 
     public void stopAllAI() {
-        for (GameObject obj : objects) {
-            if (obj instanceof Car) {
-                ((Car) obj).carAI.stopAI();
-            } else if (obj instanceof Oil) {
-                ((Oil) obj).oilAI.stopAI();
-            }
-        }
+        carAI.stopAI();
+        oilAI.stopAI();
     }
 }
