@@ -1,12 +1,27 @@
 package org.example.laba_4;
 
 import javafx.application.Platform;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
-public abstract class BaseAI {
+public abstract class BaseAI<T extends GameObject> {
     public volatile boolean running = true;
     public volatile boolean paused = false;
     public Thread thread;
-    private final Object lock = new Object(); // Объект для синхронизации
+    public final Object lock = new Object();
+    protected final List<T> objects = new CopyOnWriteArrayList<>();
+
+    public void addObject(T object) {
+        synchronized (lock) {
+            objects.add(object);
+        }
+    }
+
+    public void removeObject(T object) {
+        synchronized (lock) {
+            objects.remove(object);
+        }
+    }
 
     public void pauseAI() {
         synchronized (lock) {
@@ -17,7 +32,7 @@ public abstract class BaseAI {
     public void resumeAI() {
         synchronized (lock) {
             paused = false;
-            lock.notifyAll(); // Пробуждаем все ожидающие потоки
+            lock.notifyAll();
         }
 
         if ((thread == null || !thread.isAlive()) && running) {
@@ -26,7 +41,7 @@ public abstract class BaseAI {
                     synchronized (lock) {
                         while (paused && running) {
                             try {
-                                lock.wait(); // Ожидаем снятия паузы
+                                lock.wait();
                             } catch (InterruptedException e) {
                                 Thread.currentThread().interrupt();
                                 break;
@@ -36,7 +51,7 @@ public abstract class BaseAI {
 
                     if (!running) break;
 
-                    Platform.runLater(this::updateAI);
+                    Platform.runLater(this::updateAllAI);
 
                     try {
                         Thread.sleep(50);
@@ -56,10 +71,9 @@ public abstract class BaseAI {
         synchronized (lock) {
             running = false;
             paused = false;
-            lock.notifyAll(); // Пробуждаем поток для завершения
+            lock.notifyAll();
         }
     }
 
-    public abstract void updateAI();
-    public abstract void generateFinishPos(double start_pos_x, double end_pos_x, double start_pos_y, double end_pos_y);
+    protected abstract void updateAllAI();
 }
