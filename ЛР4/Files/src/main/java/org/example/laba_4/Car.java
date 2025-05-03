@@ -7,7 +7,8 @@ import javafx.scene.media.MediaPlayer;
 
 public class Car extends GameObject {
     private MediaPlayer mediaPlayer;
-    public CarAI carAI;
+    double targetPosX = 0;
+    double targetPosY = 0;
 
     public Car() {
         Image image = new Image(getClass().getResourceAsStream("/bmw.png"));
@@ -19,18 +20,9 @@ public class Car extends GameObject {
         speedX = 1 + Math.random() * 2;
         speedY = 1 + Math.random() * 2;
 
-        carAI = new CarAI(this);
-        carAI.resumeAI(); // сразу запускаем поток
+        Habitat.getInstance().getCarAI().addObject(this);
 
         initEngineSound();
-    }
-
-    public double getSpeedX() {
-        return speedX;
-    }
-
-    public double getSpeedY() {
-        return speedY;
     }
 
     public void initEngineSound() {
