@@ -5,6 +5,8 @@ import javafx.scene.image.ImageView;
 
 public class Oil extends GameObject {
     public OilAI oilAI;
+    double targetPosX = 0;
+    double targetPosY = 0;
 
     public Oil() {
         Image image = new Image(getClass().getResourceAsStream("/oil.png"));
@@ -16,8 +18,7 @@ public class Oil extends GameObject {
         speedX = 0.5 + Math.random();
         speedY = 0.5 + Math.random();
 
-        oilAI = new OilAI(this);
-        oilAI.resumeAI();
+        Habitat.getInstance().getOilAI().addObject(this);
     }
 
     @Override

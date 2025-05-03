@@ -2,39 +2,58 @@ package org.example.laba_4;
 
 import javafx.application.Platform;
 
-public class OilAI extends BaseAI {
-    private final Oil oil;
-    private double targetPosX, targetPosY;
+public class OilAI extends BaseAI<Oil> {
+    private static final double AREA_WIDTH = 500;   // Ширина всей области
+    private static final double AREA_HEIGHT = 679; // Высота всей области
+    private static final double TARGET_AREA_WIDTH = AREA_WIDTH / 2;   // Ширина целевой области (правый нижний прямоугольник)
+    private static final double TARGET_AREA_HEIGHT = AREA_HEIGHT / 2; // Высота целевой области
 
-    public OilAI(Oil oil) {
-        this.oil = oil;
-        generateFinishPos(250, 500, 340, 679);
+    public OilAI() {
     }
 
     @Override
-    public void generateFinishPos(double start_pos_x, double end_pos_x, double start_pos_y, double end_pos_y) {
-        double maxWidth = 500;
-        double maxHeight = 679;
-        targetPosX = Math.min(start_pos_x + (Math.random() * (end_pos_x - start_pos_x)), maxWidth - oil.getImageView().getFitWidth());
-        targetPosY = Math.min(start_pos_y + (Math.random() * (end_pos_y - start_pos_y)), maxHeight - oil.getImageView().getFitHeight());
-    }
-
-    @Override
-    public void updateAI() {
+    protected void updateAllAI() {
         if (!running) return;
 
-        double currentX = oil.getImageView().getX();
-        double currentY = oil.getImageView().getY();
-        double newX = currentX + (targetPosX > currentX ? oil.speedX : -oil.speedX);
-        double newY = currentY + (targetPosY > currentY ? oil.speedY : -oil.speedY);
+        synchronized (lock) {
+            for (Oil oil : objects) {
+                // Если цель еще не установлена
+                if (oil.targetPosX == 0 && oil.targetPosY == 0) {
+                    double currentX = oil.getImageView().getX();
+                    double currentY = oil.getImageView().getY();
 
-        Platform.runLater(() -> {
-            oil.getImageView().setX(newX);
-            oil.getImageView().setY(newY);
-        });
+                    // Проверяем, находится ли масло уже в целевой области (правый нижний прямоугольник)
+                    if (currentX >= TARGET_AREA_WIDTH && currentY >= TARGET_AREA_HEIGHT) {
+                        // Если уже в целевой области - остаемся на месте
+                        oil.targetPosX = currentX;
+                        oil.targetPosY = currentY;
+                    } else {
+                        // Иначе выбираем случайную точку в целевой области
+                        oil.targetPosX = TARGET_AREA_WIDTH + Math.random() * TARGET_AREA_WIDTH;
+                        oil.targetPosY = TARGET_AREA_HEIGHT + Math.random() * TARGET_AREA_HEIGHT;
 
-        if (Math.abs(newX - targetPosX) < 1 && Math.abs(newY - targetPosY) < 1) {
-            stopAI();
+                        // Убедимся, что не выходим за границы
+                        oil.targetPosX = Math.min(oil.targetPosX, AREA_WIDTH - oil.getImageView().getFitWidth());
+                        oil.targetPosY = Math.min(oil.targetPosY, AREA_HEIGHT - oil.getImageView().getFitHeight());
+                    }
+                }
+
+                // Движение к цели
+                double currentX = oil.getImageView().getX();
+                double currentY = oil.getImageView().getY();
+                double newX = currentX + (oil.targetPosX > currentX ? oil.speedX : -oil.speedX);
+                double newY = currentY + (oil.targetPosY > currentY ? oil.speedY : -oil.speedY);
+
+                Platform.runLater(() -> {
+                    oil.getImageView().setX(newX);
+                    oil.getImageView().setY(newY);
+                });
+
+                // Проверка достижения цели
+                if (Math.abs(newX - oil.targetPosX) < 1 && Math.abs(newY - oil.targetPosY) < 1) {
+                    removeObject(oil);
+                }
+            }
         }
     }
 }
