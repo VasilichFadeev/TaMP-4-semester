@@ -187,32 +187,51 @@ public class Main extends Application {
                     String output;
                     if (line.startsWith("Установить вероятность генерации машин")) {
                         try {
-                            String valueStr = line.substring(line.lastIndexOf(" ") + 1)
-                                    .replace("%", "");
+                            // Извлекаем числовую часть команды
+                            String valuePart = line.substring("Установить вероятность генерации машин".length()).trim();
+                            String valueStr = valuePart.replace("%", "").trim();
+
+                            // Проверка на пустой ввод
+                            if (valueStr.isEmpty()) {
+                                output = "Ошибка: не указано значение вероятности\n";
+                                writer.write(output);
+                                writer.flush();
+                                continue;
+                            }
+
                             double probability = Double.parseDouble(valueStr);
 
-                            if (line.contains("%") || probability > 1) {
+                            // Обработка процентов (если был знак % или число >1)
+                            boolean isPercent = valuePart.contains("%");
+                            if (isPercent || probability > 1) {
                                 probability /= 100;
                             }
 
-                            if (probability >= 0 && probability <= 1) {
-                                CAR_SPAWN_PROBABILITY = probability;
-                                output = "Установлена вероятность: " + CAR_SPAWN_PROBABILITY + "\n";
+                            // Проверка диапазона
+                            if (probability < 0) {
+                                output = "Ошибка: вероятность не может быть отрицательной\n";
+                            } else if (probability > 1) {
+                                output = "Ошибка: вероятность не может превышать 100%\n";
                             } else {
-                                output = "Ошибка: вероятность должна быть от 0 до 1 (или 0% до 100%)" + "\n";
+                                CAR_SPAWN_PROBABILITY = probability;
+                                output = String.format("Установлена вероятность: %.2f (%.0f%%)\n",
+                                        probability, probability*100);
                             }
                         } catch (NumberFormatException e) {
-                            output = "Ошибка: неверный формат числа" + "\n";
+                            output = "Ошибка: введите корректное число (например: 0.2 или 20%)\n";
                         }
                     }
                     else if (line.equals("Получить вероятность генерации машин")) {
-                        output = "Текущая вероятность: " + CAR_SPAWN_PROBABILITY + "\n";
+                        output = String.format("Текущая вероятность: %.2f (%.0f%%)\n",
+                                CAR_SPAWN_PROBABILITY, CAR_SPAWN_PROBABILITY*100);
                     }
                     else {
-                        output = "Неизвестная команда" + "\n";
+                        output = "Неизвестная команда. Доступные команды:\n" +
+                                "• Установить вероятность генерации машин <0.0-1.0 или 0%-100%>\n" +
+                                "• Получить вероятность генерации машин\n";
                     }
 
-                    writer.write(output + "\n");
+                    writer.write(output);
                     writer.flush();
                 }
             } catch (IOException e) {
