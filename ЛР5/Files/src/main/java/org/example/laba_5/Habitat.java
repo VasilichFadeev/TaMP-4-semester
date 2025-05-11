@@ -3,10 +3,10 @@ package org.example.laba_5;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.Pane;
 
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.TreeMap;
-import java.util.Vector;
+import java.io.*;
+import java.util.*;
+
+import static org.example.laba_5.Main.*;
 
 public class    Habitat {
     private boolean paused;
@@ -172,5 +172,78 @@ public class    Habitat {
     public void stopAllAI() {
         carAI.stopAI();
         oilAI.stopAI();
+    }
+
+    public void saveState(String filename) throws IOException {
+        try (PrintWriter writer = new PrintWriter(new FileWriter(filename))) {
+            // Сохраняем настройки с точками в качестве разделителей
+            writer.println("CAR_SPAWN_INTERVAL=" + String.format("%.2f", CAR_SPAWN_INTERVAL / 1e9).replace(',', '.'));
+            writer.println("OIL_SPAWN_INTERVAL=" + String.format("%.2f", OIL_SPAWN_INTERVAL / 1e9).replace(',', '.'));
+            writer.println("CAR_LIFETIME=" + String.format("%.2f", CAR_LIFETIME / 1e9).replace(',', '.'));
+            writer.println("OIL_LIFETIME=" + String.format("%.2f", OIL_LIFETIME / 1e9).replace(',', '.'));
+            writer.println("CAR_SPAWN_PROBABILITY=" + String.format("%.2f", CAR_SPAWN_PROBABILITY).replace(',', '.'));
+            writer.println("OIL_SPAWN_PROBABILITY=" + String.format("%.2f", OIL_SPAWN_PROBABILITY).replace(',', '.'));
+            writer.println("SIMULATION_TIME=" + String.format("%.9f", (System.nanoTime() - simulationStartTime) / 1e9).replace(',', '.'));
+
+            // Сохраняем объекты
+            for (GameObject obj : objects) {
+                writer.println("--- " + obj.getClass().getSimpleName());
+                writer.println(obj.serialize().replace(',', '.')); // Заменяем запятые на точки
+            }
+        }
+    }
+
+    public void loadState(String filename) throws IOException {
+        clear(); // Очищаем текущее состояние
+
+        try (BufferedReader reader = new BufferedReader(new FileReader(filename))) {
+            String line;
+            List<String> objLines = new ArrayList<>();
+            long simTime = 0;
+
+            while ((line = reader.readLine()) != null) {
+                line = line.trim();
+                if (line.isEmpty()) continue;
+
+                if (line.startsWith("--- ")) {
+                    if (!objLines.isEmpty()) {
+                        try {
+                            GameObject obj = GameObject.deserialize(objLines.toArray(new String[0]));
+                            objects.add(obj);
+                            objectIds.add(obj.getId());
+                            birthTimeMap.put(obj.birthTime, obj);
+                            pane.getChildren().add(obj.getImageView());
+                        } catch (IllegalArgumentException e) {
+                            System.err.println("Ошибка загрузки объекта: " + e.getMessage());
+                        }
+                        objLines.clear();
+                    }
+                    objLines.add(line);
+                } else if (line.startsWith("SIMULATION_TIME=")) {
+                    try {
+                        String timeStr = line.split("=")[1].trim().replace(',', '.');
+                        simTime = (long)(Double.parseDouble(timeStr) * 1_000_000_000L);
+                    } catch (NumberFormatException e) {
+                        System.err.println("Ошибка формата времени симуляции: " + line);
+                    }
+                } else {
+                    objLines.add(line);
+                }
+            }
+
+            if (!objLines.isEmpty()) {
+                try {
+                    GameObject obj = GameObject.deserialize(objLines.toArray(new String[0]));
+                    objects.add(obj);
+                    objectIds.add(obj.getId());
+                    birthTimeMap.put(obj.birthTime, obj);
+                    pane.getChildren().add(obj.getImageView());
+                } catch (IllegalArgumentException e) {
+                    System.err.println("Ошибка загрузки объекта: " + e.getMessage());
+                }
+            }
+
+            simulationStartTime = System.nanoTime() - simTime;
+        }
     }
 }

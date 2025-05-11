@@ -18,12 +18,15 @@ import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.scene.text.Text;
+import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
 import java.io.*;
 import java.util.List;
 
 public class Main extends Application {
+    private Stage stage;
+
     private MediaPlayer collisionSound;
     private MediaPlayer carCrashSound;
     private MediaPlayer oilSound;
@@ -50,12 +53,12 @@ public class Main extends Application {
     private long lastCollisionSoundTime = 0;
     private static final long COLLISION_SOUND_COOLDOWN = 500_000_000L;
 
-    private double CAR_SPAWN_PROBABILITY = 0.8;
-    private double OIL_SPAWN_PROBABILITY = 0.4;
-    private static long CAR_SPAWN_INTERVAL = 2_000_000_000L;
-    private static long OIL_SPAWN_INTERVAL = 3_000_000_000L;
-    private static final long CAR_LIFETIME = 10_000_000_000L;
-    private static final long OIL_LIFETIME = 7_000_000_000L;
+    public static double CAR_SPAWN_PROBABILITY = 0.8;
+    public static double OIL_SPAWN_PROBABILITY = 0.4;
+    public static long CAR_SPAWN_INTERVAL = 2_000_000_000L;
+    public static long OIL_SPAWN_INTERVAL = 3_000_000_000L;
+    public static long CAR_LIFETIME = 10_000_000_000L;
+    public static long OIL_LIFETIME = 7_000_000_000L;
     private long lastCarSpawnTime = 0;
     private long lastOilSpawnTime = 0;
     private double time_counter = 0;
@@ -122,17 +125,25 @@ public class Main extends Application {
         Menu fileMenu = new Menu("Файл");
         startMenuItem = new MenuItem("Старт");
         stopMenuItem = new MenuItem("Стоп");
+        MenuItem loadMenuItem = new MenuItem("Загрузить...");
+        MenuItem saveMenuItem = new MenuItem("Сохранить...");
         MenuItem exitMenuItem = new MenuItem("Выход");
 
         startMenuItem.setOnAction(e -> startSimulationFromMenu());
         stopMenuItem.setOnAction(e -> stopSimulationFromMenu());
+        loadMenuItem.setOnAction(e -> loadFromFile());
+        saveMenuItem.setOnAction(e -> saveToFile());
         exitMenuItem.setOnAction(e -> {
             Habitat.getInstance().stopAllAI();
             Platform.exit();
             System.exit(0); // гарантированное завершение
         });
 
-        fileMenu.getItems().addAll(startMenuItem, stopMenuItem, new SeparatorMenuItem(), exitMenuItem);
+        fileMenu.getItems().addAll(startMenuItem, stopMenuItem, new SeparatorMenuItem(),
+                         loadMenuItem, saveMenuItem, new SeparatorMenuItem(),
+                         exitMenuItem);
+
+
 
         // Настройки
         Menu settingsMenu = new Menu("Настройки");
@@ -849,6 +860,121 @@ public class Main extends Application {
                 oilProbabilityList.getSelectionModel().select(oilProb);
             }
         });
+    }
+
+    private void saveConfig() {
+        try (PrintWriter writer = new PrintWriter(new FileWriter("config.cfg"))) {
+            writer.println("CAR_SPAWN_INTERVAL=" + CAR_SPAWN_INTERVAL / 1e9);
+            writer.println("OIL_SPAWN_INTERVAL=" + OIL_SPAWN_INTERVAL / 1e9);
+            writer.println("CAR_LIFETIME=" + CAR_LIFETIME / 1e9);
+            writer.println("OIL_LIFETIME=" + OIL_LIFETIME / 1e9);
+            writer.println("CAR_SPAWN_PROBABILITY=" + CAR_SPAWN_PROBABILITY);
+            writer.println("OIL_SPAWN_PROBABILITY=" + OIL_SPAWN_PROBABILITY);
+            writer.println("SHOW_TIME=" + showTime);
+            writer.println("SHOW_INFO_DIALOG=" + showInfoDialog);
+        } catch (IOException e) {
+            System.err.println("Ошибка сохранения конфигурации: " + e.getMessage());
+        }
+    }
+
+    private void loadConfig() {
+        File configFile = new File("config.cfg");
+        if (configFile.exists()) {
+            try (BufferedReader reader = new BufferedReader(new FileReader(configFile))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    String[] parts = line.split("=");
+                    if (parts.length == 2) {
+                        switch (parts[0]) {
+                            case "CAR_SPAWN_INTERVAL":
+                                CAR_SPAWN_INTERVAL = (long)(Double.parseDouble(parts[1]) * 1e9);
+                                carSpawnIntervalField.setText(parts[1]);
+                                break;
+                            case "OIL_SPAWN_INTERVAL":
+                                OIL_SPAWN_INTERVAL = (long)(Double.parseDouble(parts[1]) * 1e9);
+                                oilSpawnIntervalField.setText(parts[1]);
+                                break;
+                            case "CAR_LIFETIME":
+                                CAR_LIFETIME = (long)(Double.parseDouble(parts[1]) * 1e9);
+                                carLifetimeField.setText(parts[1]);
+                                break;
+                            case "OIL_LIFETIME":
+                                OIL_LIFETIME = (long)(Double.parseDouble(parts[1]) * 1e9);
+                                oilLifetimeField.setText(parts[1]);
+                                break;
+                            case "CAR_SPAWN_PROBABILITY":
+                                CAR_SPAWN_PROBABILITY = Double.parseDouble(parts[1]);
+                                carProbabilityCombo.getSelectionModel().select((int)(CAR_SPAWN_PROBABILITY * 10) - 1);
+                                break;
+                            case "OIL_SPAWN_PROBABILITY":
+                                OIL_SPAWN_PROBABILITY = Double.parseDouble(parts[1]);
+                                oilProbabilityList.getSelectionModel().select((int)(OIL_SPAWN_PROBABILITY * 10) - 1);
+                                break;
+                            case "SHOW_TIME":
+                                showTime = Boolean.parseBoolean(parts[1]);
+                                showTimeMenuItem.setSelected(showTime);
+                                toolbarShowTimeButton.setSelected(showTime);
+                                timeToggle.selectToggle(showTime ? showTimeRadio : hideTimeRadio);
+                                break;
+                            case "SHOW_INFO_DIALOG":
+                                showInfoDialog = Boolean.parseBoolean(parts[1]);
+                                showInfoMenuItem.setSelected(showInfoDialog);
+                                toolbarShowInfoButton.setSelected(showInfoDialog);
+                                showInfoCheckBox.setSelected(showInfoDialog);
+                                break;
+                        }
+                    }
+                }
+            } catch (IOException e) {
+                System.err.println("Ошибка загрузки конфигурации: " + e.getMessage());
+            }
+        }
+    }
+
+    private void saveToFile() {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Сохранить состояние симуляции");
+        fileChooser.getExtensionFilters().add(
+                new FileChooser.ExtensionFilter("Текстовые файлы", "*.txt"));
+        File file = fileChooser.showSaveDialog(stage);
+
+        if (file != null) {
+            try {
+                habitat.saveState(file.getAbsolutePath());
+            } catch (IOException e) {
+                showErrorDialog("Ошибка сохранения", e.getMessage());
+            }
+        }
+    }
+
+    private void loadFromFile() {
+        if (isSimulationRunning) {
+            stopSimulation();
+        }
+
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Загрузить состояние симуляции");
+        fileChooser.getExtensionFilters().add(
+                new FileChooser.ExtensionFilter("Текстовые файлы", "*.txt"));
+        File file = fileChooser.showOpenDialog(stage);
+
+        if (file != null) {
+            try {
+                habitat.loadState(file.getAbsolutePath());
+            } catch (IOException e) {
+                showErrorDialog("Ошибка загрузки", e.getMessage());
+            }
+        }
+        habitat.setCarAIPaused(false);
+        habitat.setOilAIPaused(false);
+    }
+
+    private void showErrorDialog(String title, String message) {
+        Alert alert = new Alert(Alert.AlertType.ERROR);
+        alert.setTitle(title);
+        alert.setHeaderText(null);
+        alert.setContentText(message);
+        alert.showAndWait();
     }
 
     public static void main(String[] args) {
