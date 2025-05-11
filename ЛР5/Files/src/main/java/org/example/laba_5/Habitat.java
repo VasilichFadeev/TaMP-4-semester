@@ -183,12 +183,13 @@ public class    Habitat {
             writer.println("OIL_LIFETIME=" + String.format("%.2f", OIL_LIFETIME / 1e9).replace(',', '.'));
             writer.println("CAR_SPAWN_PROBABILITY=" + String.format("%.2f", CAR_SPAWN_PROBABILITY).replace(',', '.'));
             writer.println("OIL_SPAWN_PROBABILITY=" + String.format("%.2f", OIL_SPAWN_PROBABILITY).replace(',', '.'));
-            writer.println("SIMULATION_TIME=" + String.format("%.9f", (System.nanoTime() - simulationStartTime) / 1e9).replace(',', '.'));
 
-            // Сохраняем объекты
+            double currentTime = (System.nanoTime() - simulationStartTime) / 1e9;
+            writer.println("SIMULATION_TIME=" + String.format("%.1f", currentTime).replace(',', '.'));
+            // Сохранение данных
             for (GameObject obj : objects) {
                 writer.println("--- " + obj.getClass().getSimpleName());
-                writer.println(obj.serialize().replace(',', '.')); // Заменяем запятые на точки
+                writer.println(obj.serialize().replace(',', '.')); // Замена запятых на точки
             }
         }
     }

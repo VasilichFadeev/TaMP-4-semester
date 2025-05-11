@@ -961,6 +961,9 @@ public class Main extends Application {
         if (file != null) {
             try {
                 habitat.loadState(file.getAbsolutePath());
+                // После загрузки устанавливаем флаг running и обновляем кнопки
+                isSimulationRunning = true;
+                updateButtonStates();
             } catch (IOException e) {
                 showErrorDialog("Ошибка загрузки", e.getMessage());
             }
