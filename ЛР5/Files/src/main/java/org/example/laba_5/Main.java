@@ -22,11 +22,14 @@ import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
 import java.io.*;
+import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
 import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.concurrent.CountDownLatch;
 
 public class Main extends Application {
-    private Stage stage;
-
     private MediaPlayer collisionSound;
     private MediaPlayer carCrashSound;
     private MediaPlayer oilSound;
@@ -53,12 +56,12 @@ public class Main extends Application {
     private long lastCollisionSoundTime = 0;
     private static final long COLLISION_SOUND_COOLDOWN = 500_000_000L;
 
-    public static double CAR_SPAWN_PROBABILITY = 0.8;
-    public static double OIL_SPAWN_PROBABILITY = 0.4;
-    public static long CAR_SPAWN_INTERVAL = 2_000_000_000L;
-    public static long OIL_SPAWN_INTERVAL = 3_000_000_000L;
-    public static long CAR_LIFETIME = 10_000_000_000L;
-    public static long OIL_LIFETIME = 7_000_000_000L;
+    private double CAR_SPAWN_PROBABILITY = 0.8;
+    private double OIL_SPAWN_PROBABILITY = 0.4;
+    private long CAR_SPAWN_INTERVAL = 2_000_000_000L;
+    private long OIL_SPAWN_INTERVAL = 3_000_000_000L;
+    private long CAR_LIFETIME = 10_000_000_000L;
+    private long OIL_LIFETIME = 7_000_000_000L;
     private long lastCarSpawnTime = 0;
     private long lastOilSpawnTime = 0;
     private double time_counter = 0;
@@ -67,23 +70,76 @@ public class Main extends Application {
     private MenuItem stopMenuItem;
     private CheckMenuItem showTimeMenuItem;
     private CheckMenuItem showInfoMenuItem;
+    private MenuItem saveMenuItem;
+    private MenuItem loadMenuItem;
     private ToggleButton toolbarStartButton;
     private ToggleButton toolbarConsoleButton;
     private ToggleButton toolbarShowTimeButton;
     private ToggleButton toolbarShowInfoButton;
+    private boolean isLoadedSimulation;
+
+    private static final String CONFIG_FILE = "config.txt";
+    private static final DecimalFormat DECIMAL_FORMAT;
+
+    static {
+        DecimalFormatSymbols symbols = new DecimalFormatSymbols();
+        symbols.setDecimalSeparator('.');
+        DECIMAL_FORMAT = new DecimalFormat("#.##", symbols);
+        DECIMAL_FORMAT.setParseBigDecimal(true);
+    }
 
     @Override
     public void start(Stage stage) throws IOException {
         int x_size = 1000;
         int y_size = 1000;
-        int x_kutuzka_size = (500);
-        int y_kutuzka_size = (679);
+        int x_kutuzka_size = 500;
+        int y_kutuzka_size = 679;
+
+        // Загрузка конфигурации
+        loadConfig();
 
         // Инициализация полей для жизни (продолжительности и интервалов рождения)
         carLifetimeField = new TextField(String.valueOf(CAR_LIFETIME / 1_000_000_000L));
         oilLifetimeField = new TextField(String.valueOf(OIL_LIFETIME / 1_000_000_000L));
         carSpawnIntervalField = new TextField(String.valueOf(CAR_SPAWN_INTERVAL / 1_000_000_000L));
         oilSpawnIntervalField = new TextField(String.valueOf(OIL_SPAWN_INTERVAL / 1_000_000_000L));
+
+        // Обновление переменных при изменении полей
+        carSpawnIntervalField.textProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal.matches("\\d*")) {
+                try {
+                    CAR_SPAWN_INTERVAL = (long)(Double.parseDouble(newVal) * 1_000_000_000L);
+                } catch (NumberFormatException ignored) {
+                }
+            }
+        });
+
+        oilSpawnIntervalField.textProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal.matches("\\d*")) {
+                try {
+                    OIL_SPAWN_INTERVAL = (long)(Double.parseDouble(newVal) * 1_000_000_000L);
+                } catch (NumberFormatException ignored) {
+                }
+            }
+        });
+
+        carLifetimeField.textProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal.matches("\\d*")) {
+                try {
+                    CAR_LIFETIME = (long)(Double.parseDouble(newVal) * 1_000_000_000L);
+                } catch (NumberFormatException ignored) {
+                }
+            }
+        });
+
+        oilLifetimeField.textProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal.matches("\\d*")) {
+                try {
+                    OIL_LIFETIME = (long)(Double.parseDouble(newVal) * 1_000_000_000L);
+                } catch (NumberFormatException ignored) {
+                }
+            }
+        });
 
         // Кнопки для панели управления рождением
         TextField headerCarLifeField = new TextField(String.valueOf(CAR_LIFETIME / 1_000_000_000L));
@@ -125,25 +181,22 @@ public class Main extends Application {
         Menu fileMenu = new Menu("Файл");
         startMenuItem = new MenuItem("Старт");
         stopMenuItem = new MenuItem("Стоп");
-        MenuItem loadMenuItem = new MenuItem("Загрузить...");
-        MenuItem saveMenuItem = new MenuItem("Сохранить...");
+        saveMenuItem = new MenuItem("Сохранить");
+        loadMenuItem = new MenuItem("Загрузить");
         MenuItem exitMenuItem = new MenuItem("Выход");
 
         startMenuItem.setOnAction(e -> startSimulationFromMenu());
         stopMenuItem.setOnAction(e -> stopSimulationFromMenu());
-        loadMenuItem.setOnAction(e -> loadFromFile());
-        saveMenuItem.setOnAction(e -> saveToFile());
+        saveMenuItem.setOnAction(e -> saveSimulation());
+        loadMenuItem.setOnAction(e -> loadSimulation(stage));
         exitMenuItem.setOnAction(e -> {
+            saveConfig();
             Habitat.getInstance().stopAllAI();
             Platform.exit();
-            System.exit(0); // гарантированное завершение
+            System.exit(0);
         });
 
-        fileMenu.getItems().addAll(startMenuItem, stopMenuItem, new SeparatorMenuItem(),
-                         loadMenuItem, saveMenuItem, new SeparatorMenuItem(),
-                         exitMenuItem);
-
-
+        fileMenu.getItems().addAll(startMenuItem, stopMenuItem, saveMenuItem, loadMenuItem, new SeparatorMenuItem(), exitMenuItem);
 
         // Настройки
         Menu settingsMenu = new Menu("Настройки");
@@ -177,10 +230,9 @@ public class Main extends Application {
 
         // ToolBar
         ToolBar toolBar = new ToolBar();
-
-            toolbarStartButton = new ToggleButton("▶");
-            Image end_button = new Image(getClass().getResourceAsStream("/malevich_square.png"), 12, 12, true, true);
-            Button toolbarEndButton = new Button();
+        toolbarStartButton = new ToggleButton("▶");
+        Image end_button = new Image(getClass().getResourceAsStream("/malevich_square.png"), 12, 12, true, true);
+        Button toolbarEndButton = new Button();
         toolbarConsoleButton = new ToggleButton("Консоль");
         toolbarEndButton.setGraphic(new ImageView(end_button));
 
@@ -198,51 +250,32 @@ public class Main extends Application {
                     String output;
                     if (line.startsWith("Установить вероятность генерации машин")) {
                         try {
-                            // Извлекаем числовую часть команды
-                            String valuePart = line.substring("Установить вероятность генерации машин".length()).trim();
-                            String valueStr = valuePart.replace("%", "").trim();
-
-                            // Проверка на пустой ввод
-                            if (valueStr.isEmpty()) {
-                                output = "Ошибка: не указано значение вероятности\n";
-                                writer.write(output);
-                                writer.flush();
-                                continue;
-                            }
-
+                            String valueStr = line.substring(line.lastIndexOf(" ") + 1)
+                                    .replace("%", "");
                             double probability = Double.parseDouble(valueStr);
 
-                            // Обработка процентов (если был знак % или число >1)
-                            boolean isPercent = valuePart.contains("%");
-                            if (isPercent || probability > 1) {
+                            if (line.contains("%") || probability > 1) {
                                 probability /= 100;
                             }
 
-                            // Проверка диапазона
-                            if (probability < 0) {
-                                output = "Ошибка: вероятность не может быть отрицательной\n";
-                            } else if (probability > 1) {
-                                output = "Ошибка: вероятность не может превышать 100%\n";
-                            } else {
+                            if (probability >= 0 && probability <= 1) {
                                 CAR_SPAWN_PROBABILITY = probability;
-                                output = String.format("Установлена вероятность: %.2f (%.0f%%)\n",
-                                        probability, probability*100);
+                                output = "Установлена вероятность: " + CAR_SPAWN_PROBABILITY + "\n";
+                            } else {
+                                output = "Ошибка: вероятность должна быть от 0 до 1 (или 0% до 100%)" + "\n";
                             }
                         } catch (NumberFormatException e) {
-                            output = "Ошибка: введите корректное число (например: 0.2 или 20%)\n";
+                            output = "Ошибка: неверный формат числа" + "\n";
                         }
                     }
                     else if (line.equals("Получить вероятность генерации машин")) {
-                        output = String.format("Текущая вероятность: %.2f (%.0f%%)\n",
-                                CAR_SPAWN_PROBABILITY, CAR_SPAWN_PROBABILITY*100);
+                        output = "Текущая вероятность: " + CAR_SPAWN_PROBABILITY + "\n";
                     }
                     else {
-                        output = "Неизвестная команда. Доступные команды:\n" +
-                                "• Установить вероятность генерации машин <0.0-1.0 или 0%-100%>\n" +
-                                "• Получить вероятность генерации машин\n";
+                        output = "Неизвестная команда" + "\n";
                     }
 
-                    writer.write(output);
+                    writer.write(output + "\n");
                     writer.flush();
                 }
             } catch (IOException e) {
@@ -341,7 +374,6 @@ public class Main extends Application {
             Habitat.getInstance().setOilAIPriority(priority);
         });
 
-// Добавим в controlPanel
         controlPanel.getChildren().addAll(
                 new Separator(),
                 priorityLabel,
@@ -355,8 +387,7 @@ public class Main extends Application {
             dialog.showAndWait();
         });
         controlPanel.getChildren().add(currentObjectsButton);
-        
-        // Все поля
+
         controlPanel.getChildren().addAll(
                 new Separator(),
                 new Label("Время жизни объектов (сек):"),
@@ -367,7 +398,6 @@ public class Main extends Application {
                 new HBox(5, new Label("Машины:"), carSpawnIntervalField),
                 new HBox(5, new Label("Масло:"), oilSpawnIntervalField)
         );
-
 
         // Обработка исключений при вводе в полях правой панели
         carSpawnIntervalField.textProperty().addListener((obs, oldVal, newVal) -> {
@@ -399,13 +429,13 @@ public class Main extends Application {
         carProbabilityCombo = new ComboBox<>(createProbabilityItems());
         oilProbabilityList = new ListView<>(createProbabilityItems());
 
-        carProbabilityCombo.getSelectionModel().select("80%");
+        carProbabilityCombo.getSelectionModel().select((int)(CAR_SPAWN_PROBABILITY * 100) + "%");
         carProbabilityCombo.setOnAction(e -> {
             String selected = carProbabilityCombo.getSelectionModel().getSelectedItem();
             CAR_SPAWN_PROBABILITY = Integer.parseInt(selected.replace("%", "")) / 100.0;
         });
 
-        oilProbabilityList.getSelectionModel().select("40%");
+        oilProbabilityList.getSelectionModel().select((int)(OIL_SPAWN_PROBABILITY * 100) + "%");
         oilProbabilityList.getSelectionModel().selectedItemProperty().addListener((obs, oldVal, newVal) -> {
             OIL_SPAWN_PROBABILITY = Integer.parseInt(newVal.replace("%", "")) / 100.0;
         });
@@ -518,7 +548,7 @@ public class Main extends Application {
             @Override
             public void handle(long now) {
                 if (isSimulationRunning) {
-                    // Удаление "умеревших" объектов
+                    // Удаление "умерших" объектов
                     habitat.getObjects().removeIf(obj -> obj.isExpired(now - simulationStartTime));
 
                     spawnCars(now);
@@ -536,10 +566,225 @@ public class Main extends Application {
         stage.setResizable(false);
         stage.show();
         stage.setOnCloseRequest(event -> {
+            saveConfig();
             Habitat.getInstance().stopAllAI();
             Platform.exit();
             System.exit(0);
         });
+    }
+
+    private void loadConfig() {
+        Properties props = new Properties();
+        try (FileReader reader = new FileReader(CONFIG_FILE)) {
+            props.load(reader);
+            CAR_SPAWN_INTERVAL = Long.parseLong(props.getProperty("car_spawn_interval", String.valueOf(CAR_SPAWN_INTERVAL)));
+            OIL_SPAWN_INTERVAL = Long.parseLong(props.getProperty("oil_spawn_interval", String.valueOf(OIL_SPAWN_INTERVAL)));
+            CAR_LIFETIME = Long.parseLong(props.getProperty("car_lifetime", String.valueOf(CAR_LIFETIME)));
+            OIL_LIFETIME = Long.parseLong(props.getProperty("oil_lifetime", String.valueOf(OIL_LIFETIME)));
+            CAR_SPAWN_PROBABILITY = Double.parseDouble(props.getProperty("car_spawn_probability", String.valueOf(CAR_SPAWN_PROBABILITY)));
+            OIL_SPAWN_PROBABILITY = Double.parseDouble(props.getProperty("oil_spawn_probability", String.valueOf(OIL_SPAWN_PROBABILITY)));
+            showTime = Boolean.parseBoolean(props.getProperty("show_time", String.valueOf(showTime)));
+            showInfoDialog = Boolean.parseBoolean(props.getProperty("show_info_dialog", String.valueOf(showInfoDialog)));
+            time_counter = Double.parseDouble(props.getProperty("global_time", String.valueOf(time_counter)));
+        } catch (IOException | NumberFormatException e) {
+            System.err.println("Error loading config: " + e.getMessage());
+        }
+    }
+
+    private void saveConfig() {
+        Properties props = new Properties();
+        props.setProperty("car_spawn_interval", String.valueOf(CAR_SPAWN_INTERVAL));
+        props.setProperty("oil_spawn_interval", String.valueOf(OIL_SPAWN_INTERVAL));
+        props.setProperty("car_lifetime", String.valueOf(CAR_LIFETIME));
+        props.setProperty("oil_lifetime", String.valueOf(OIL_LIFETIME));
+        props.setProperty("car_spawn_probability", DECIMAL_FORMAT.format(CAR_SPAWN_PROBABILITY));
+        props.setProperty("oil_spawn_probability", DECIMAL_FORMAT.format(OIL_SPAWN_PROBABILITY));
+        props.setProperty("show_time", String.valueOf(showTime));
+        props.setProperty("show_info_dialog", String.valueOf(showInfoDialog));
+        props.setProperty("global_time", DECIMAL_FORMAT.format(time_counter));
+
+        try (FileWriter writer = new FileWriter(CONFIG_FILE)) {
+            props.store(writer, "Simulation Configuration");
+        } catch (IOException e) {
+            System.err.println("Error saving config: " + e.getMessage());
+        }
+    }
+
+    private void saveSimulation() {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Сохранить симуляцию");
+        fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Text Files", "*.txt"));
+        File file = fileChooser.showSaveDialog(null);
+        if (file == null) return;
+
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
+            writer.write("global_time=" + DECIMAL_FORMAT.format(time_counter));
+            writer.newLine();
+            writer.write("car_spawn_interval=" + (CAR_SPAWN_INTERVAL / 1_000_000_000L));
+            writer.newLine();
+            writer.write("oil_spawn_interval=" + (OIL_SPAWN_INTERVAL / 1_000_000_000L));
+            writer.newLine();
+            writer.write("car_lifetime=" + (CAR_LIFETIME / 1_000_000_000L));
+            writer.newLine();
+            writer.write("oil_lifetime=" + (OIL_LIFETIME / 1_000_000_000L));
+            writer.newLine();
+            writer.write("car_spawn_probability=" + DECIMAL_FORMAT.format(CAR_SPAWN_PROBABILITY));
+            writer.newLine();
+            writer.write("oil_spawn_probability=" + DECIMAL_FORMAT.format(OIL_SPAWN_PROBABILITY));
+            writer.newLine();
+            writer.write("show_time=" + showTime);
+            writer.newLine();
+            writer.write("show_info_dialog=" + showInfoDialog);
+            writer.newLine();
+
+            for (GameObject obj : habitat.getObjects()) {
+                String type = obj instanceof Car ? "car" : "oil";
+                writer.write(String.format("%s%d.id=%d", type, obj.getId(), obj.getId()));
+                writer.newLine();
+                writer.write(String.format("%s%d.lifetime=%d", type, obj.getId(), obj.getLifetime()));
+                writer.newLine();
+                writer.write(String.format("%s%d.birth_time=%d", type, obj.getId(), obj.getBirthTime()));
+                writer.newLine();
+                writer.write(String.format("%s%d.x=%s", type, obj.getId(), DECIMAL_FORMAT.format(obj.getX())));
+                writer.newLine();
+                writer.write(String.format("%s%d.y=%s", type, obj.getId(), DECIMAL_FORMAT.format(obj.getY())));
+                writer.newLine();
+                writer.write(String.format("%s%d.speed_x=%s", type, obj.getId(),
+                        DECIMAL_FORMAT.format(obj instanceof Car ? ((Car)obj).speedX : ((Oil)obj).speedX)));
+                writer.newLine();
+                writer.write(String.format("%s%d.speed_y=%s", type, obj.getId(),
+                        DECIMAL_FORMAT.format(obj instanceof Car ? ((Car)obj).speedY : ((Oil)obj).speedY)));
+                writer.newLine();
+                writer.write(String.format("%s%d.target_pos_x=%s", type, obj.getId(),
+                        DECIMAL_FORMAT.format(obj instanceof Car ? ((Car)obj).targetPosX : ((Oil)obj).targetPosX)));
+                writer.newLine();
+                writer.write(String.format("%s%d.target_pos_y=%s", type, obj.getId(),
+                        DECIMAL_FORMAT.format(obj instanceof Car ? ((Car)obj).targetPosY : ((Oil)obj).targetPosY)));
+                writer.newLine();
+            }
+        } catch (IOException e) {
+            System.err.println("Error saving simulation: " + e.getMessage());
+        }
+    }
+
+    private void loadSimulation(Stage stage) {
+        if (isSimulationRunning) {
+            stopSimulation();
+        }
+
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Загрузить симуляцию");
+        fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Text Files", "*.txt"));
+        File file = fileChooser.showOpenDialog(stage);
+        if (file == null) return;
+
+        habitat.clear();
+        Properties props = new Properties();
+        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                String[] parts = line.split("=");
+                if (parts.length != 2) continue;
+                props.setProperty(parts[0].trim(), parts[1].trim());
+            }
+        } catch (IOException e) {
+            System.err.println("Error loading simulation: " + e.getMessage());
+            return;
+        }
+
+        // Загрузка конфигурации
+        try {
+            time_counter = DECIMAL_FORMAT.parse(props.getProperty("global_time", "0")).doubleValue();
+            CAR_SPAWN_INTERVAL = (long)(DECIMAL_FORMAT.parse(props.getProperty("car_spawn_interval", "2")).doubleValue() * 1_000_000_000L);
+            OIL_SPAWN_INTERVAL = (long)(DECIMAL_FORMAT.parse(props.getProperty("oil_spawn_interval", "3")).doubleValue() * 1_000_000_000L);
+            CAR_LIFETIME = (long)(DECIMAL_FORMAT.parse(props.getProperty("car_lifetime", "10")).doubleValue() * 1_000_000_000L);
+            OIL_LIFETIME = (long)(DECIMAL_FORMAT.parse(props.getProperty("oil_lifetime", "7")).doubleValue() * 1_000_000_000L);
+            CAR_SPAWN_PROBABILITY = DECIMAL_FORMAT.parse(props.getProperty("car_spawn_probability", "0.8")).doubleValue();
+            OIL_SPAWN_PROBABILITY = DECIMAL_FORMAT.parse(props.getProperty("oil_spawn_probability", "0.4")).doubleValue();
+            showTime = Boolean.parseBoolean(props.getProperty("show_time", "true"));
+            showInfoDialog = Boolean.parseBoolean(props.getProperty("show_info_dialog", "true"));
+
+            carSpawnIntervalField.setText(String.valueOf(CAR_SPAWN_INTERVAL / 1_000_000_000L));
+            oilSpawnIntervalField.setText(String.valueOf(OIL_SPAWN_INTERVAL / 1_000_000_000L));
+            carLifetimeField.setText(String.valueOf(CAR_LIFETIME / 1_000_000_000L));
+            oilLifetimeField.setText(String.valueOf(OIL_LIFETIME / 1_000_000_000L));
+            carProbabilityCombo.getSelectionModel().select((int)(CAR_SPAWN_PROBABILITY * 100) + "%");
+            oilProbabilityList.getSelectionModel().select((int)(OIL_SPAWN_PROBABILITY * 100) + "%");
+            showTimeRadio.setSelected(showTime);
+            hideTimeRadio.setSelected(!showTime);
+            showInfoCheckBox.setSelected(showInfoDialog);
+            showTimeMenuItem.setSelected(showTime);
+            showInfoMenuItem.setSelected(showInfoDialog);
+            toolbarShowTimeButton.setSelected(showTime);
+            toolbarShowInfoButton.setSelected(showInfoDialog);
+            statsText.setText(String.format("Time: %.1f s", time_counter));
+            statsText.setVisible(showTime);
+        } catch (Exception e) {
+            System.err.println("Error parsing simulation config: " + e.getMessage());
+        }
+
+        // Загрузка объектов
+        long currentTime = System.nanoTime();
+        simulationStartTime = currentTime - (long)(time_counter * 1_000_000_000L);
+        for (String key : props.stringPropertyNames()) {
+            if (key.startsWith("car") || key.startsWith("oil")) {
+                String[] parts = key.split("\\.");
+                if (parts.length != 2) continue;
+                String type = parts[0].substring(0, 3);
+                int id = Integer.parseInt(parts[0].substring(3));
+
+                GameObject obj;
+                if (type.equals("car")) {
+                    obj = new Car();
+                } else if (type.equals("oil")) {
+                    obj = new Oil();
+                } else {
+                    continue;
+                }
+
+                try {
+                    obj.setLifetime(Long.parseLong(props.getProperty(type + id + ".lifetime")));
+                    long savedBirthTime = Long.parseLong(props.getProperty(type + id + ".birth_time"));
+                    obj.birthTime = simulationStartTime + savedBirthTime;
+                    obj.id = id;
+
+                    double x = DECIMAL_FORMAT.parse(props.getProperty(type + id + ".x")).doubleValue();
+                    double y = DECIMAL_FORMAT.parse(props.getProperty(type + id + ".y")).doubleValue();
+                    obj.setPosition(x, y);
+
+                    if (type.equals("car")) {
+                        Car car = (Car) obj;
+                        car.speedX = DECIMAL_FORMAT.parse(props.getProperty(type + id + ".speed_x")).doubleValue();
+                        car.speedY = DECIMAL_FORMAT.parse(props.getProperty(type + id + ".speed_y")).doubleValue();
+                        car.targetPosX = DECIMAL_FORMAT.parse(props.getProperty(type + id + ".target_pos_x")).doubleValue();
+                        car.targetPosY = DECIMAL_FORMAT.parse(props.getProperty(type + id + ".target_pos_y")).doubleValue();
+                        habitat.getCarAI().addObject(car);
+                    } else {
+                        Oil oil = (Oil) obj;
+                        oil.speedX = DECIMAL_FORMAT.parse(props.getProperty(type + id + ".speed_x")).doubleValue();
+                        oil.speedY = DECIMAL_FORMAT.parse(props.getProperty(type + id + ".speed_y")).doubleValue();
+                        oil.targetPosX = DECIMAL_FORMAT.parse(props.getProperty(type + id + ".target_pos_x")).doubleValue();
+                        oil.targetPosY = DECIMAL_FORMAT.parse(props.getProperty(type + id + ".target_pos_y")).doubleValue();
+                        habitat.getOilAI().addObject(oil);
+                    }
+
+                    habitat.getObjects().add(obj);
+                    habitat.getBirthTimeMap().put(obj.getBirthTime(), obj);
+                    habitat.getObjectIds().add(obj.getId());
+                    Platform.runLater(() -> habitat.getPane().getChildren().add(obj.getImageView()));
+                } catch (Exception e) {
+                    System.err.println("Error parsing object " + type + id + ": " + e.getMessage());
+                }
+            }
+        }
+        // Оживление потоков
+        habitat.setCarAIPaused(true);
+        habitat.setOilAIPaused(true);
+        habitat.setCarAIPaused(false);
+        habitat.setOilAIPaused(false);
+
+        isLoadedSimulation = true;
+        startSimulation();
     }
 
     private void updateButtonStates() {
@@ -555,8 +800,6 @@ public class Main extends Application {
             Media oilMedia = new Media(getClass().getResource("/oil_sound.wav").toString());
 
             collisionSound = new MediaPlayer(collisionMedia);
-//            carCrashSound = new MediaPlayer(crashMedia); // звуки убраны из-за стремления объектов к одной точке
-//            oilSound = new MediaPlayer(oilMedia);
         } catch (Exception e) {
             System.err.println("Error loading sounds: " + e.getMessage());
         }
@@ -565,13 +808,21 @@ public class Main extends Application {
     private void startSimulation() {
         isSimulationRunning = true;
         habitat.setSimulationPaused(false);
-        simulationStartTime = System.nanoTime();
+
+        if (!isLoadedSimulation) { // Очищение времени
+            time_counter = 0;
+            simulationStartTime = System.nanoTime();
+        } else {
+            // Для загруженных симуляций сохранить time_counter и настройте simulationStartTime
+            simulationStartTime = System.nanoTime() - (long)(time_counter * 1_000_000_000L);
+            isLoadedSimulation = false; // Сбросить флаг после обработки загруженной симуляции
+        }
+
         pauseTime = 0;
-        time_counter = 0;
-        statsText.setText("Time: 0.0 s");
-        habitat.clear();
-        resetStatsTextStyle();
+        statsText.setText(String.format("Time: %.1f s", time_counter));
         statsText.setVisible(showTime);
+        habitat.clear(); // Очистить предыдущие объекты
+        resetStatsTextStyle();
         lastCarSpawnTime = System.nanoTime();
         lastOilSpawnTime = System.nanoTime();
         if (!showTime) {
@@ -679,8 +930,7 @@ public class Main extends Application {
 
     private void spawnCars(long now) {
         try {
-            CAR_SPAWN_INTERVAL = (long)(Double.parseDouble(carSpawnIntervalField.getText()) * 1_000_000_000L);
-            long carLifetime = (long)(Double.parseDouble(carLifetimeField.getText()) * 1_000_000_000L);
+            long carLifetime = CAR_LIFETIME;
 
             if (now - lastCarSpawnTime >= CAR_SPAWN_INTERVAL) {
                 if (Math.random() < CAR_SPAWN_PROBABILITY) {
@@ -695,8 +945,7 @@ public class Main extends Application {
 
     private void spawnOil(long now) {
         try {
-            OIL_SPAWN_INTERVAL = (long)(Double.parseDouble(oilSpawnIntervalField.getText()) * 1_000_000_000L);
-            long oilLifetime = (long)(Double.parseDouble(oilLifetimeField.getText()) * 1_000_000_000L);
+            long oilLifetime = OIL_LIFETIME;
 
             if (now - lastOilSpawnTime >= OIL_SPAWN_INTERVAL) {
                 if (Math.random() < OIL_SPAWN_PROBABILITY) {
@@ -756,7 +1005,6 @@ public class Main extends Application {
         }
     }
 
-    // Методы для работы с меню
     private void startSimulationFromMenu() {
         if (!isSimulationRunning) {
             startSimulation();
@@ -836,10 +1084,10 @@ public class Main extends Application {
         grid.setPadding(new Insets(20, 150, 10, 10));
 
         ComboBox<String> carProbCombo = new ComboBox<>(createProbabilityItems());
-        carProbCombo.getSelectionModel().select((int)(CAR_SPAWN_PROBABILITY * 10) - 1);
+        carProbCombo.getSelectionModel().select((int)(CAR_SPAWN_PROBABILITY * 100) + "%");
 
         ListView<String> oilProbList = new ListView<>(createProbabilityItems());
-        oilProbList.getSelectionModel().select((int)(OIL_SPAWN_PROBABILITY * 10) - 1);
+        oilProbList.getSelectionModel().select((int)(OIL_SPAWN_PROBABILITY * 100) + "%");
 
         grid.add(new Label("Вероятность машин:"), 0, 0);
         grid.add(carProbCombo, 1, 0);
@@ -860,124 +1108,6 @@ public class Main extends Application {
                 oilProbabilityList.getSelectionModel().select(oilProb);
             }
         });
-    }
-
-    private void saveConfig() {
-        try (PrintWriter writer = new PrintWriter(new FileWriter("config.cfg"))) {
-            writer.println("CAR_SPAWN_INTERVAL=" + CAR_SPAWN_INTERVAL / 1e9);
-            writer.println("OIL_SPAWN_INTERVAL=" + OIL_SPAWN_INTERVAL / 1e9);
-            writer.println("CAR_LIFETIME=" + CAR_LIFETIME / 1e9);
-            writer.println("OIL_LIFETIME=" + OIL_LIFETIME / 1e9);
-            writer.println("CAR_SPAWN_PROBABILITY=" + CAR_SPAWN_PROBABILITY);
-            writer.println("OIL_SPAWN_PROBABILITY=" + OIL_SPAWN_PROBABILITY);
-            writer.println("SHOW_TIME=" + showTime);
-            writer.println("SHOW_INFO_DIALOG=" + showInfoDialog);
-        } catch (IOException e) {
-            System.err.println("Ошибка сохранения конфигурации: " + e.getMessage());
-        }
-    }
-
-    private void loadConfig() {
-        File configFile = new File("config.cfg");
-        if (configFile.exists()) {
-            try (BufferedReader reader = new BufferedReader(new FileReader(configFile))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    String[] parts = line.split("=");
-                    if (parts.length == 2) {
-                        switch (parts[0]) {
-                            case "CAR_SPAWN_INTERVAL":
-                                CAR_SPAWN_INTERVAL = (long)(Double.parseDouble(parts[1]) * 1e9);
-                                carSpawnIntervalField.setText(parts[1]);
-                                break;
-                            case "OIL_SPAWN_INTERVAL":
-                                OIL_SPAWN_INTERVAL = (long)(Double.parseDouble(parts[1]) * 1e9);
-                                oilSpawnIntervalField.setText(parts[1]);
-                                break;
-                            case "CAR_LIFETIME":
-                                CAR_LIFETIME = (long)(Double.parseDouble(parts[1]) * 1e9);
-                                carLifetimeField.setText(parts[1]);
-                                break;
-                            case "OIL_LIFETIME":
-                                OIL_LIFETIME = (long)(Double.parseDouble(parts[1]) * 1e9);
-                                oilLifetimeField.setText(parts[1]);
-                                break;
-                            case "CAR_SPAWN_PROBABILITY":
-                                CAR_SPAWN_PROBABILITY = Double.parseDouble(parts[1]);
-                                carProbabilityCombo.getSelectionModel().select((int)(CAR_SPAWN_PROBABILITY * 10) - 1);
-                                break;
-                            case "OIL_SPAWN_PROBABILITY":
-                                OIL_SPAWN_PROBABILITY = Double.parseDouble(parts[1]);
-                                oilProbabilityList.getSelectionModel().select((int)(OIL_SPAWN_PROBABILITY * 10) - 1);
-                                break;
-                            case "SHOW_TIME":
-                                showTime = Boolean.parseBoolean(parts[1]);
-                                showTimeMenuItem.setSelected(showTime);
-                                toolbarShowTimeButton.setSelected(showTime);
-                                timeToggle.selectToggle(showTime ? showTimeRadio : hideTimeRadio);
-                                break;
-                            case "SHOW_INFO_DIALOG":
-                                showInfoDialog = Boolean.parseBoolean(parts[1]);
-                                showInfoMenuItem.setSelected(showInfoDialog);
-                                toolbarShowInfoButton.setSelected(showInfoDialog);
-                                showInfoCheckBox.setSelected(showInfoDialog);
-                                break;
-                        }
-                    }
-                }
-            } catch (IOException e) {
-                System.err.println("Ошибка загрузки конфигурации: " + e.getMessage());
-            }
-        }
-    }
-
-    private void saveToFile() {
-        FileChooser fileChooser = new FileChooser();
-        fileChooser.setTitle("Сохранить состояние симуляции");
-        fileChooser.getExtensionFilters().add(
-                new FileChooser.ExtensionFilter("Текстовые файлы", "*.txt"));
-        File file = fileChooser.showSaveDialog(stage);
-
-        if (file != null) {
-            try {
-                habitat.saveState(file.getAbsolutePath());
-            } catch (IOException e) {
-                showErrorDialog("Ошибка сохранения", e.getMessage());
-            }
-        }
-    }
-
-    private void loadFromFile() {
-        if (isSimulationRunning) {
-            stopSimulation();
-        }
-
-        FileChooser fileChooser = new FileChooser();
-        fileChooser.setTitle("Загрузить состояние симуляции");
-        fileChooser.getExtensionFilters().add(
-                new FileChooser.ExtensionFilter("Текстовые файлы", "*.txt"));
-        File file = fileChooser.showOpenDialog(stage);
-
-        if (file != null) {
-            try {
-                habitat.loadState(file.getAbsolutePath());
-                // После загрузки устанавливаем флаг running и обновляем кнопки
-                isSimulationRunning = true;
-                updateButtonStates();
-            } catch (IOException e) {
-                showErrorDialog("Ошибка загрузки", e.getMessage());
-            }
-        }
-        habitat.setCarAIPaused(false);
-        habitat.setOilAIPaused(false);
-    }
-
-    private void showErrorDialog(String title, String message) {
-        Alert alert = new Alert(Alert.AlertType.ERROR);
-        alert.setTitle(title);
-        alert.setHeaderText(null);
-        alert.setContentText(message);
-        alert.showAndWait();
     }
 
     public static void main(String[] args) {
