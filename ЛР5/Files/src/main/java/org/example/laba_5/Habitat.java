@@ -3,10 +3,10 @@ package org.example.laba_5;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.Pane;
 
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.TreeMap;
-import java.util.Vector;
+import java.io.*;
+import java.util.*;
+
+import static org.example.laba_5.Main.*;
 
 public class    Habitat {
     private boolean paused;
@@ -172,13 +172,5 @@ public class    Habitat {
     public void stopAllAI() {
         carAI.stopAI();
         oilAI.stopAI();
-    }
-
-    public HashSet<Integer> getObjectIds() {
-        return objectIds;
-    }
-
-    public Pane getPane() {
-        return pane;
     }
 }

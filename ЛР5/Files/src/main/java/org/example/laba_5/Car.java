@@ -5,10 +5,14 @@ import javafx.scene.image.ImageView;
 import javafx.scene.media.Media;
 import javafx.scene.media.MediaPlayer;
 
-public class Car extends GameObject {
+import java.io.Serializable;
+
+public class Car extends GameObject implements Serializable {
     private MediaPlayer mediaPlayer;
     double targetPosX = 0;
     double targetPosY = 0;
+    private static final long serialVersionUID = 1L;
+
 
     public Car() {
         Image image = new Image(getClass().getResourceAsStream("/bmw.png"));

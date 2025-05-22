@@ -7,6 +7,7 @@ public class CarAI extends BaseAI<Car> {
     private static final double AREA_HEIGHT = 679; // Высота всей области
     private static final double TARGET_AREA_WIDTH = AREA_WIDTH / 2;   // Ширина целевой области (левый верхний прямоугольник)
     private static final double TARGET_AREA_HEIGHT = AREA_HEIGHT / 2; // Высота целевой области
+    private long startTime;
 
     public CarAI() {
     }

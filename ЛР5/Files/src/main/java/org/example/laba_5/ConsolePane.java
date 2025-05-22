@@ -1,5 +1,6 @@
 package org.example.laba_5;
 
+import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextArea;
 import javafx.scene.layout.BorderPane;
 import java.io.*;
@@ -17,7 +18,13 @@ public class ConsolePane extends BorderPane {
                 "-fx-text-fill: #E0E0E0; " +
                 "-fx-font-family: 'Consolas', monospace; " +
                 "-fx-font-size: 14px;");
-        setCenter(textArea);
+        ScrollPane scrollPane = new ScrollPane(textArea);
+        scrollPane.setFitToWidth(true);
+        scrollPane.setFitToHeight(true);
+        scrollPane.setVbarPolicy(ScrollPane.ScrollBarPolicy.ALWAYS); // Всегда показывать вертикальный скролл
+        scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);  // Горизонтальный скролл не нужен
+
+        setCenter(scrollPane); // Добавляем ScrollPane вместо TextArea
 
         writer = new BufferedWriter(new OutputStreamWriter(out));
         reader = new BufferedReader(new InputStreamReader(in));
@@ -35,6 +42,7 @@ public class ConsolePane extends BorderPane {
                         textArea.appendText("\n");
                         writer.write(lastLine + "\n");
                         writer.flush();
+                        textArea.setScrollTop(Double.MAX_VALUE);
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
@@ -49,9 +57,10 @@ public class ConsolePane extends BorderPane {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     String finalLine = line;
-                    javafx.application.Platform.runLater(() ->
-                            textArea.appendText("> " + finalLine + "\n")
-                    );
+                    javafx.application.Platform.runLater(() -> {
+                        textArea.appendText("> " + finalLine + "\n");
+                        textArea.setScrollTop(Double.MAX_VALUE);
+                    });
                 }
             } catch (IOException e) {
                 e.printStackTrace();
@@ -64,9 +73,9 @@ public class ConsolePane extends BorderPane {
     private void showWelcomeMessage() {
         String welcomeText =
                 "Welcome to\n" +
-                        "       ____            ____           ____      ____      ______      ______        ___          ____ \n" +
-                        "__    ___/   __    ____   \\   __/       |  /     /__/   ____/ __/   ___    \\ __/   /     __/   __  \\ \n" +
-                        "_/   /       __/   /     /   /  __/    |   |/     / _/___   \\    __/   /    /   /__/   /    __/   ____/ \n" +
+                        "       ____            ____           ____      ____      ______      ______        ___          _____ \n" +
+                        "__    ___/   __    ____   \\   __/       |  /     /__/   ____/ __/   ___    \\ __/   /     __/   ___  \\ \n" +
+                        "_/   /       __/   /     /   /  __/    |   |/     / _/___   \\    __/   /    /   /__/   /    __/   _____/ \n" +
                         "/   /__   __/   /___/   /  __/     /|   |    /  ____/   /  __/   /___/   /__/   /___   /   /_____   \n" +
                         "\\____/      \\_______/     /___/  |____/  /______/       \\_______/    /______/   \\______/   \n\n" +
                         "Доступные команды:\n" +

@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
+import java.util.stream.Collectors;
 
 public class Main extends Application {
     private MediaPlayer collisionSound;
@@ -76,6 +77,7 @@ public class Main extends Application {
     private ToggleButton toolbarConsoleButton;
     private ToggleButton toolbarShowTimeButton;
     private ToggleButton toolbarShowInfoButton;
+    private Pane objectPane;
     private boolean isLoadedSimulation;
 
     private static final String CONFIG_FILE = "config.txt";
@@ -168,7 +170,7 @@ public class Main extends Application {
         ImageView backgroundImageView = new ImageView(backgroundImage);
 
         BorderPane root = new BorderPane();
-        Pane objectPane = new Pane();
+        objectPane = new Pane();
         StackPane visualizationPane = new StackPane();
         StackPane.setAlignment(backgroundImageView, Pos.CENTER_LEFT);
         visualizationPane.getChildren().addAll(backgroundImageView, objectPane);
@@ -188,7 +190,7 @@ public class Main extends Application {
         startMenuItem.setOnAction(e -> startSimulationFromMenu());
         stopMenuItem.setOnAction(e -> stopSimulationFromMenu());
         saveMenuItem.setOnAction(e -> saveSimulation());
-        loadMenuItem.setOnAction(e -> loadSimulation(stage));
+        loadMenuItem.setOnAction(e -> loadSimulation());
         exitMenuItem.setOnAction(e -> {
             saveConfig();
             Habitat.getInstance().stopAllAI();
@@ -196,7 +198,7 @@ public class Main extends Application {
             System.exit(0);
         });
 
-        fileMenu.getItems().addAll(startMenuItem, stopMenuItem, saveMenuItem, loadMenuItem, new SeparatorMenuItem(), exitMenuItem);
+        fileMenu.getItems().addAll(startMenuItem, stopMenuItem, new SeparatorMenuItem(), saveMenuItem, loadMenuItem, new SeparatorMenuItem(), exitMenuItem);
 
         // Настройки
         Menu settingsMenu = new Menu("Настройки");
@@ -610,183 +612,6 @@ public class Main extends Application {
         }
     }
 
-    private void saveSimulation() {
-        FileChooser fileChooser = new FileChooser();
-        fileChooser.setTitle("Сохранить симуляцию");
-        fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Text Files", "*.txt"));
-        File file = fileChooser.showSaveDialog(null);
-        if (file == null) return;
-
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
-            writer.write("global_time=" + DECIMAL_FORMAT.format(time_counter));
-            writer.newLine();
-            writer.write("car_spawn_interval=" + (CAR_SPAWN_INTERVAL / 1_000_000_000L));
-            writer.newLine();
-            writer.write("oil_spawn_interval=" + (OIL_SPAWN_INTERVAL / 1_000_000_000L));
-            writer.newLine();
-            writer.write("car_lifetime=" + (CAR_LIFETIME / 1_000_000_000L));
-            writer.newLine();
-            writer.write("oil_lifetime=" + (OIL_LIFETIME / 1_000_000_000L));
-            writer.newLine();
-            writer.write("car_spawn_probability=" + DECIMAL_FORMAT.format(CAR_SPAWN_PROBABILITY));
-            writer.newLine();
-            writer.write("oil_spawn_probability=" + DECIMAL_FORMAT.format(OIL_SPAWN_PROBABILITY));
-            writer.newLine();
-            writer.write("show_time=" + showTime);
-            writer.newLine();
-            writer.write("show_info_dialog=" + showInfoDialog);
-            writer.newLine();
-
-            for (GameObject obj : habitat.getObjects()) {
-                String type = obj instanceof Car ? "car" : "oil";
-                writer.write(String.format("%s%d.id=%d", type, obj.getId(), obj.getId()));
-                writer.newLine();
-                writer.write(String.format("%s%d.lifetime=%d", type, obj.getId(), obj.getLifetime()));
-                writer.newLine();
-                writer.write(String.format("%s%d.birth_time=%d", type, obj.getId(), obj.getBirthTime()));
-                writer.newLine();
-                writer.write(String.format("%s%d.x=%s", type, obj.getId(), DECIMAL_FORMAT.format(obj.getX())));
-                writer.newLine();
-                writer.write(String.format("%s%d.y=%s", type, obj.getId(), DECIMAL_FORMAT.format(obj.getY())));
-                writer.newLine();
-                writer.write(String.format("%s%d.speed_x=%s", type, obj.getId(),
-                        DECIMAL_FORMAT.format(obj instanceof Car ? ((Car)obj).speedX : ((Oil)obj).speedX)));
-                writer.newLine();
-                writer.write(String.format("%s%d.speed_y=%s", type, obj.getId(),
-                        DECIMAL_FORMAT.format(obj instanceof Car ? ((Car)obj).speedY : ((Oil)obj).speedY)));
-                writer.newLine();
-                writer.write(String.format("%s%d.target_pos_x=%s", type, obj.getId(),
-                        DECIMAL_FORMAT.format(obj instanceof Car ? ((Car)obj).targetPosX : ((Oil)obj).targetPosX)));
-                writer.newLine();
-                writer.write(String.format("%s%d.target_pos_y=%s", type, obj.getId(),
-                        DECIMAL_FORMAT.format(obj instanceof Car ? ((Car)obj).targetPosY : ((Oil)obj).targetPosY)));
-                writer.newLine();
-            }
-        } catch (IOException e) {
-            System.err.println("Error saving simulation: " + e.getMessage());
-        }
-    }
-
-    private void loadSimulation(Stage stage) {
-        if (isSimulationRunning) {
-            stopSimulation();
-        }
-
-        FileChooser fileChooser = new FileChooser();
-        fileChooser.setTitle("Загрузить симуляцию");
-        fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Text Files", "*.txt"));
-        File file = fileChooser.showOpenDialog(stage);
-        if (file == null) return;
-
-        habitat.clear();
-        Properties props = new Properties();
-        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                String[] parts = line.split("=");
-                if (parts.length != 2) continue;
-                props.setProperty(parts[0].trim(), parts[1].trim());
-            }
-        } catch (IOException e) {
-            System.err.println("Error loading simulation: " + e.getMessage());
-            return;
-        }
-
-        // Загрузка конфигурации
-        try {
-            time_counter = DECIMAL_FORMAT.parse(props.getProperty("global_time", "0")).doubleValue();
-            CAR_SPAWN_INTERVAL = (long)(DECIMAL_FORMAT.parse(props.getProperty("car_spawn_interval", "2")).doubleValue() * 1_000_000_000L);
-            OIL_SPAWN_INTERVAL = (long)(DECIMAL_FORMAT.parse(props.getProperty("oil_spawn_interval", "3")).doubleValue() * 1_000_000_000L);
-            CAR_LIFETIME = (long)(DECIMAL_FORMAT.parse(props.getProperty("car_lifetime", "10")).doubleValue() * 1_000_000_000L);
-            OIL_LIFETIME = (long)(DECIMAL_FORMAT.parse(props.getProperty("oil_lifetime", "7")).doubleValue() * 1_000_000_000L);
-            CAR_SPAWN_PROBABILITY = DECIMAL_FORMAT.parse(props.getProperty("car_spawn_probability", "0.8")).doubleValue();
-            OIL_SPAWN_PROBABILITY = DECIMAL_FORMAT.parse(props.getProperty("oil_spawn_probability", "0.4")).doubleValue();
-            showTime = Boolean.parseBoolean(props.getProperty("show_time", "true"));
-            showInfoDialog = Boolean.parseBoolean(props.getProperty("show_info_dialog", "true"));
-
-            carSpawnIntervalField.setText(String.valueOf(CAR_SPAWN_INTERVAL / 1_000_000_000L));
-            oilSpawnIntervalField.setText(String.valueOf(OIL_SPAWN_INTERVAL / 1_000_000_000L));
-            carLifetimeField.setText(String.valueOf(CAR_LIFETIME / 1_000_000_000L));
-            oilLifetimeField.setText(String.valueOf(OIL_LIFETIME / 1_000_000_000L));
-            carProbabilityCombo.getSelectionModel().select((int)(CAR_SPAWN_PROBABILITY * 100) + "%");
-            oilProbabilityList.getSelectionModel().select((int)(OIL_SPAWN_PROBABILITY * 100) + "%");
-            showTimeRadio.setSelected(showTime);
-            hideTimeRadio.setSelected(!showTime);
-            showInfoCheckBox.setSelected(showInfoDialog);
-            showTimeMenuItem.setSelected(showTime);
-            showInfoMenuItem.setSelected(showInfoDialog);
-            toolbarShowTimeButton.setSelected(showTime);
-            toolbarShowInfoButton.setSelected(showInfoDialog);
-            statsText.setText(String.format("Time: %.1f s", time_counter));
-            statsText.setVisible(showTime);
-        } catch (Exception e) {
-            System.err.println("Error parsing simulation config: " + e.getMessage());
-        }
-
-        // Загрузка объектов
-        long currentTime = System.nanoTime();
-        simulationStartTime = currentTime - (long)(time_counter * 1_000_000_000L);
-        for (String key : props.stringPropertyNames()) {
-            if (key.startsWith("car") || key.startsWith("oil")) {
-                String[] parts = key.split("\\.");
-                if (parts.length != 2) continue;
-                String type = parts[0].substring(0, 3);
-                int id = Integer.parseInt(parts[0].substring(3));
-
-                GameObject obj;
-                if (type.equals("car")) {
-                    obj = new Car();
-                } else if (type.equals("oil")) {
-                    obj = new Oil();
-                } else {
-                    continue;
-                }
-
-                try {
-                    obj.setLifetime(Long.parseLong(props.getProperty(type + id + ".lifetime")));
-                    long savedBirthTime = Long.parseLong(props.getProperty(type + id + ".birth_time"));
-                    obj.birthTime = simulationStartTime + savedBirthTime;
-                    obj.id = id;
-
-                    double x = DECIMAL_FORMAT.parse(props.getProperty(type + id + ".x")).doubleValue();
-                    double y = DECIMAL_FORMAT.parse(props.getProperty(type + id + ".y")).doubleValue();
-                    obj.setPosition(x, y);
-
-                    if (type.equals("car")) {
-                        Car car = (Car) obj;
-                        car.speedX = DECIMAL_FORMAT.parse(props.getProperty(type + id + ".speed_x")).doubleValue();
-                        car.speedY = DECIMAL_FORMAT.parse(props.getProperty(type + id + ".speed_y")).doubleValue();
-                        car.targetPosX = DECIMAL_FORMAT.parse(props.getProperty(type + id + ".target_pos_x")).doubleValue();
-                        car.targetPosY = DECIMAL_FORMAT.parse(props.getProperty(type + id + ".target_pos_y")).doubleValue();
-                        habitat.getCarAI().addObject(car);
-                    } else {
-                        Oil oil = (Oil) obj;
-                        oil.speedX = DECIMAL_FORMAT.parse(props.getProperty(type + id + ".speed_x")).doubleValue();
-                        oil.speedY = DECIMAL_FORMAT.parse(props.getProperty(type + id + ".speed_y")).doubleValue();
-                        oil.targetPosX = DECIMAL_FORMAT.parse(props.getProperty(type + id + ".target_pos_x")).doubleValue();
-                        oil.targetPosY = DECIMAL_FORMAT.parse(props.getProperty(type + id + ".target_pos_y")).doubleValue();
-                        habitat.getOilAI().addObject(oil);
-                    }
-
-                    habitat.getObjects().add(obj);
-                    habitat.getBirthTimeMap().put(obj.getBirthTime(), obj);
-                    habitat.getObjectIds().add(obj.getId());
-                    Platform.runLater(() -> habitat.getPane().getChildren().add(obj.getImageView()));
-                } catch (Exception e) {
-                    System.err.println("Error parsing object " + type + id + ": " + e.getMessage());
-                }
-            }
-        }
-        // Оживление потоков
-        habitat.setCarAIPaused(true);
-        habitat.setOilAIPaused(true);
-        habitat.setCarAIPaused(false);
-        habitat.setOilAIPaused(false);
-
-        isLoadedSimulation = true;
-        startSimulation();
-    }
-
     private void updateButtonStates() {
         startButton.setDisable(isSimulationRunning);
         stopButton.setDisable(!isSimulationRunning);
@@ -1074,6 +899,101 @@ public class Main extends Application {
         });
     }
 
+    private void saveSimulation() {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Сохранить симуляцию");
+        fileChooser.getExtensionFilters().add(
+                new FileChooser.ExtensionFilter("NFS", "*.car"));
+
+        File file = fileChooser.showSaveDialog(null);
+        if (file != null) {
+            try (ObjectOutputStream oos = new ObjectOutputStream(
+                    new FileOutputStream(file))) {
+
+                List<Car> cars = habitat.getObjects().stream()
+                        .filter(obj -> obj instanceof Car)
+                        .map(obj -> (Car)obj)
+                        .collect(Collectors.toList());
+                List<Oil> oils = habitat.getObjects().stream()
+                        .filter(obj -> obj instanceof Oil)
+                        .map(obj -> (Oil)obj)
+                        .collect(Collectors.toList());
+
+                SimulationState state = new SimulationState(
+                        cars, oils,
+                        isSimulationRunning ? System.nanoTime() - simulationStartTime : pauseTime - simulationStartTime
+                );
+
+                oos.writeObject(state);
+            } catch (IOException e) {
+                e.printStackTrace();
+                showAlert("Ошибка сохранения", "Не удалось сохранить симуляцию");
+            }
+        }
+    }
+
+    private void loadSimulation() {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Загрузить симуляцию");
+        fileChooser.getExtensionFilters().add(
+                new FileChooser.ExtensionFilter("NFS", "*.car"));
+
+        File file = fileChooser.showOpenDialog(null);
+        if (file != null) {
+            try (ObjectInputStream ois = new ObjectInputStream(
+                    new FileInputStream(file))) {
+
+                SimulationState state = (SimulationState) ois.readObject();
+                habitat.clear();
+                objectPane.getChildren().clear();
+                for (CarState carState : state.getCars()) {
+                    Car car = carState.createCar();
+                    habitat.getObjects().add(car);
+                    habitat.getCarAI().addObject(car);
+                    objectPane.getChildren().add(car.getImageView());
+                }
+
+                for (OilState oilState : state.getOils()) {
+                    Oil oil = oilState.createOil();
+                    habitat.getObjects().add(oil);
+                    habitat.getOilAI().addObject(oil);
+                    objectPane.getChildren().add(oil.getImageView());
+                }
+
+                simulationStartTime = System.nanoTime() - state.getSimulationTime();
+
+                if (!habitat.getCarAI().running) {
+                    habitat.getCarAI().resumeAI();
+                }
+                if (!habitat.getOilAI().running) {
+                    habitat.getOilAI().resumeAI();
+                }
+
+                if (!isSimulationRunning) {
+                    pauseTime = System.nanoTime();
+                } else {
+                    habitat.setSimulationPaused(false);
+                }
+
+                updateUI(System.nanoTime());
+
+            } catch (IOException | ClassNotFoundException e) {
+                e.printStackTrace();
+                showAlert("Ошибка загрузки", "Не удалось загрузить симуляцию");
+            }
+            habitat.setCarAIPaused(false);
+            habitat.setOilAIPaused(false);
+        }
+    }
+
+    private void showAlert(String title, String message) {
+        Alert alert = new Alert(Alert.AlertType.ERROR);
+        alert.setTitle(title);
+        alert.setHeaderText(null);
+        alert.setContentText(message);
+        alert.showAndWait();
+    }
+
     private void showProbabilitiesDialog() {
         Dialog<ButtonType> dialog = new Dialog<>();
         dialog.setTitle("Настройка вероятностей");
@@ -1108,6 +1028,7 @@ public class Main extends Application {
                 oilProbabilityList.getSelectionModel().select(oilProb);
             }
         });
+
     }
 
     public static void main(String[] args) {
