@@ -89,6 +89,7 @@ public class Main extends Application {
     private ListView<String> connectedClientsListView;
     private ObservableList<String> connectedClients = FXCollections.observableArrayList();
     private Button copySimulationButton;
+    private Button appendSimulationButton; // New button for appending simulation
 
     static {
         DecimalFormatSymbols symbols = new DecimalFormatSymbols();
@@ -341,7 +342,7 @@ public class Main extends Application {
             scrollPane.setFitToHeight(false);
             scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
             scrollPane.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
-            scrollPane.setPrefWidth(350); // Увеличена ширина панели
+            scrollPane.setPrefWidth(350);
             scrollPane.setStyle("-fx-background-color: #f0f0f0;");
             root.setRight(scrollPane);
 
@@ -449,13 +450,16 @@ public class Main extends Application {
             connectedClientsListView.setItems(connectedClients);
             connectedClientsListView.setPrefHeight(100);
             copySimulationButton = new Button("Копировать симуляцию");
+            appendSimulationButton = new Button("Добавить объекты"); // New button
             copySimulationButton.setOnAction(e -> copySimulationFromClient());
+            appendSimulationButton.setOnAction(e -> appendSimulationFromClient()); // New action
 
             controlPanel.getChildren().addAll(
                     new Separator(),
                     new Label("Подключенные клиенты:"),
                     connectedClientsListView,
-                    copySimulationButton
+                    copySimulationButton,
+                    appendSimulationButton // Add new button to control panel
             );
 
             timeToggle = new ToggleGroup();
@@ -637,19 +641,23 @@ public class Main extends Application {
                             connectedClients.clear();
                             connectedClients.addAll(clientIds);
                             System.out.println("Обновлен список клиентов в UI: " + connectedClients);
-                            // Дополнительная проверка содержимого ListView
                             System.out.println("Элементы в ListView: " + connectedClientsListView.getItems());
                         });
                     } else if (inputLine.startsWith("REQUEST_SIMULATION:")) {
                         System.out.println("Получен запрос симуляции: " + inputLine);
                         sendSimulationState();
+                    } else if (inputLine.startsWith("REQUEST_APPEND_SIMULATION:")) {
+                        System.out.println("Получен запрос добавления симуляции: " + inputLine);
+                        sendSimulationState();
                     } else if (inputLine.startsWith("SIMULATION_STATE:")) {
                         System.out.println("Получено состояние симуляции: " + inputLine);
                         String[] parts = inputLine.split(":");
+                        int senderId = Integer.parseInt(parts[1]);
                         int dataLength = Integer.parseInt(parts[2]);
                         byte[] data = new byte[dataLength];
                         clientSocket.getInputStream().read(data);
-                        applySimulationState(data);
+                        boolean isAppend = parts[0].equals("SIMULATION_STATE_APPEND");
+                        applySimulationState(data, isAppend);
                     } else {
                         System.out.println("Неизвестное сообщение: " + inputLine);
                     }
@@ -692,14 +700,18 @@ public class Main extends Application {
         }
     }
 
-    private void applySimulationState(byte[] data) {
+    private void applySimulationState(byte[] data, boolean isAppend) {
         try {
             ByteArrayInputStream bais = new ByteArrayInputStream(data);
             ObjectInputStream ois = new ObjectInputStream(bais);
             SimulationState state = (SimulationState) ois.readObject();
             Platform.runLater(() -> {
-                habitat.clear();
-                objectPane.getChildren().clear();
+                if (!isAppend) {
+                    // Existing behavior: clear and replace simulation
+                    habitat.clear();
+                    objectPane.getChildren().clear();
+                }
+                // Add objects from received state
                 for (CarState carState : state.getCars()) {
                     Car car = carState.createCar();
                     habitat.getObjects().add(car);
@@ -712,11 +724,14 @@ public class Main extends Application {
                     habitat.getOilAI().addObject(oil);
                     objectPane.getChildren().add(oil.getImageView());
                 }
-                simulationStartTime = System.nanoTime() - state.getSimulationTime();
-                if (!isSimulationRunning) {
-                    pauseTime = System.nanoTime();
-                } else {
-                    habitat.setSimulationPaused(false);
+                if (!isAppend) {
+                    // Only update simulation time if replacing the simulation
+                    simulationStartTime = System.nanoTime() - state.getSimulationTime();
+                    if (!isSimulationRunning) {
+                        pauseTime = System.nanoTime();
+                    } else {
+                        habitat.setSimulationPaused(false);
+                    }
                 }
             });
         } catch (IOException | ClassNotFoundException e) {
@@ -731,6 +746,15 @@ public class Main extends Application {
             socketOut.println("REQUEST_SIMULATION:" + selectedClient);
         } else {
             showAlert("Ошибка", "Выберите клиента для копирования симуляции");
+        }
+    }
+
+    private void appendSimulationFromClient() {
+        String selectedClient = connectedClientsListView.getSelectionModel().getSelectedItem();
+        if (selectedClient != null) {
+            socketOut.println("REQUEST_APPEND_SIMULATION:" + selectedClient);
+        } else {
+            showAlert("Ошибка", "Выберите клиента для добавления объектов");
         }
     }
 

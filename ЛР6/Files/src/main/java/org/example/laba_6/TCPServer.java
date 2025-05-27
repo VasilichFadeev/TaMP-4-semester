@@ -59,7 +59,10 @@ public class TCPServer {
                     System.out.println("Получено от клиента " + clientId + ": " + inputLine);
                     if (inputLine.startsWith("REQUEST_SIMULATION:")) {
                         String targetClientId = inputLine.substring(18);
-                        forwardSimulationRequest(targetClientId);
+                        forwardSimulationRequest(targetClientId, false);
+                    } else if (inputLine.startsWith("REQUEST_APPEND_SIMULATION:")) {
+                        String targetClientId = inputLine.substring(25);
+                        forwardSimulationRequest(targetClientId, true);
                     } else if (inputLine.startsWith("SIMULATION_STATE:")) {
                         String[] parts = inputLine.split(":");
                         int senderId = Integer.parseInt(parts[1]);
@@ -83,10 +86,10 @@ public class TCPServer {
             }
         }
 
-        private void forwardSimulationRequest(String targetClientId) {
+        private void forwardSimulationRequest(String targetClientId, boolean isAppend) {
             for (ClientHandler client : clients) {
                 if (client.getClientId().equals(targetClientId)) {
-                    client.out.println("REQUEST_SIMULATION:" + clientId);
+                    client.out.println(isAppend ? "REQUEST_APPEND_SIMULATION:" + clientId : "REQUEST_SIMULATION:" + clientId);
                     break;
                 }
             }
