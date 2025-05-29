@@ -616,13 +616,26 @@ public class Main extends Application {
 
     private void closeSocket() {
         try {
-            if (socketOut != null) socketOut.close();
-            if (socketObjectIn != null) socketObjectIn.close();
-            if (clientSocket != null) clientSocket.close();
+            isRunning = false; // Сигнализируем потоку слушателя о завершении
+            if (socketOut != null) {
+                // Отправляем команду серверу на завершение (если сервер поддерживает)
+                socketOut.println("SHUTDOWN");
+                socketOut.flush();
+                socketOut.close();
+            }
+            if (socketObjectIn != null) {
+                socketObjectIn.close();
+            }
+            if (clientSocket != null && !clientSocket.isClosed()) {
+                clientSocket.close();
+            }
         } catch (IOException e) {
+            System.err.println("Ошибка при закрытии сокета: " + e.getMessage());
             e.printStackTrace();
         }
     }
+
+    private volatile boolean isRunning = true;
 
     private void startServerListener() {
         new Thread(() -> {
@@ -630,7 +643,7 @@ public class Main extends Application {
                 System.out.println("Запуск слушателя сервера");
                 BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
                 String inputLine;
-                while ((inputLine = in.readLine()) != null) {
+                while (isRunning && (inputLine = in.readLine()) != null) {
                     System.out.println("Получено сообщение от сервера: '" + inputLine + "'");
                     if (inputLine.startsWith("CLIENT_LIST:")) {
                         System.out.println("Обработка сообщения CLIENT_LIST");
@@ -663,11 +676,15 @@ public class Main extends Application {
                         System.out.println("Неизвестное сообщение: " + inputLine);
                     }
                 }
-                System.out.println("Слушатель сервера завершил работу (соединение закрыто)");
+                System.out.println("Слушатель сервера завершил работу (нормальное завершение)");
             } catch (IOException e) {
-                System.err.println("Ошибка в слушателе сервера: " + e.getMessage());
-                e.printStackTrace();
-                Platform.runLater(() -> showAlert("Ошибка", "Потеряно соединение с сервером"));
+                if (isRunning) {
+                    System.err.println("Ошибка в слушателе сервера: " + e.getMessage());
+                    e.printStackTrace();
+                    Platform.runLater(() -> showAlert("Ошибка", "Потеряно соединение с сервером"));
+                } else {
+                    System.out.println("Слушатель сервера завершён из-за закрытия сокета");
+                }
             }
         }).start();
     }
