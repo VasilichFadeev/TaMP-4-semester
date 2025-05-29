@@ -69,7 +69,14 @@ public class TCPServer {
                         int dataLength = Integer.parseInt(parts[2]);
                         byte[] data = new byte[dataLength];
                         socket.getInputStream().read(data);
-                        forwardSimulationState(senderId, data);
+                        forwardSimulationState(senderId, data, false);
+                    } else if (inputLine.startsWith("SIMULATION_STATE_APPEND:")) {
+                        String[] parts = inputLine.split(":");
+                        int senderId = Integer.parseInt(parts[1]);
+                        int dataLength = Integer.parseInt(parts[2]);
+                        byte[] data = new byte[dataLength];
+                        socket.getInputStream().read(data);
+                        forwardSimulationState(senderId, data, true);
                     }
                 }
             } catch (IOException e) {
@@ -95,11 +102,11 @@ public class TCPServer {
             }
         }
 
-        private void forwardSimulationState(int senderId, byte[] data) {
+        private void forwardSimulationState(int senderId, byte[] data, boolean isAppend) {
             for (ClientHandler client : clients) {
                 if (!client.getClientId().equals(clientId)) {
                     try {
-                        client.out.println("SIMULATION_STATE:" + senderId + ":" + data.length);
+                        client.out.println((isAppend ? "SIMULATION_STATE_APPEND:" : "SIMULATION_STATE:") + senderId + ":" + data.length);
                         client.objectOut.write(data);
                         client.objectOut.flush();
                     } catch (IOException e) {

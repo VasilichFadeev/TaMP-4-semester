@@ -81,6 +81,7 @@ public class Main extends Application {
     private boolean isLoadedSimulation;
 
     private static final String CONFIG_FILE = "config.txt";
+    private static final String NETWORK_SIMULATION_FILE = "network_simulation.car";
     private static final DecimalFormat DECIMAL_FORMAT;
 
     private Socket clientSocket;
@@ -89,7 +90,7 @@ public class Main extends Application {
     private ListView<String> connectedClientsListView;
     private ObservableList<String> connectedClients = FXCollections.observableArrayList();
     private Button copySimulationButton;
-    private Button appendSimulationButton; // New button for appending simulation
+    private Button appendSimulationButton;
 
     static {
         DecimalFormatSymbols symbols = new DecimalFormatSymbols();
@@ -450,16 +451,16 @@ public class Main extends Application {
             connectedClientsListView.setItems(connectedClients);
             connectedClientsListView.setPrefHeight(100);
             copySimulationButton = new Button("Копировать симуляцию");
-            appendSimulationButton = new Button("Добавить объекты"); // New button
-            copySimulationButton.setOnAction(e -> copySimulationFromClient());
-            appendSimulationButton.setOnAction(e -> appendSimulationFromClient()); // New action
+            appendSimulationButton = new Button("Добавить объекты");
+            copySimulationButton.setOnAction(e -> copySimulationToFile());
+            appendSimulationButton.setOnAction(e -> appendSimulationFromFile());
 
             controlPanel.getChildren().addAll(
                     new Separator(),
                     new Label("Подключенные клиенты:"),
                     connectedClientsListView,
                     copySimulationButton,
-                    appendSimulationButton // Add new button to control panel
+                    appendSimulationButton
             );
 
             timeToggle = new ToggleGroup();
@@ -707,11 +708,9 @@ public class Main extends Application {
             SimulationState state = (SimulationState) ois.readObject();
             Platform.runLater(() -> {
                 if (!isAppend) {
-                    // Existing behavior: clear and replace simulation
                     habitat.clear();
                     objectPane.getChildren().clear();
                 }
-                // Add objects from received state
                 for (CarState carState : state.getCars()) {
                     Car car = carState.createCar();
                     habitat.getObjects().add(car);
@@ -725,7 +724,6 @@ public class Main extends Application {
                     objectPane.getChildren().add(oil.getImageView());
                 }
                 if (!isAppend) {
-                    // Only update simulation time if replacing the simulation
                     simulationStartTime = System.nanoTime() - state.getSimulationTime();
                     if (!isSimulationRunning) {
                         pauseTime = System.nanoTime();
@@ -737,6 +735,55 @@ public class Main extends Application {
         } catch (IOException | ClassNotFoundException e) {
             e.printStackTrace();
             showAlert("Ошибка", "Не удалось применить состояние симуляции");
+        }
+    }
+
+    private void copySimulationToFile() {
+        try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(NETWORK_SIMULATION_FILE))) {
+            List<Car> cars = habitat.getObjects().stream()
+                    .filter(obj -> obj instanceof Car)
+                    .map(obj -> (Car)obj)
+                    .collect(Collectors.toList());
+            List<Oil> oils = habitat.getObjects().stream()
+                    .filter(obj -> obj instanceof Oil)
+                    .map(obj -> (Oil)obj)
+                    .collect(Collectors.toList());
+            SimulationState state = new SimulationState(
+                    cars, oils,
+                    isSimulationRunning ? System.nanoTime() - simulationStartTime : pauseTime - simulationStartTime
+            );
+            oos.writeObject(state);
+        } catch (IOException e) {
+            e.printStackTrace();
+            showAlert("Ошибка сохранения", "Не удалось сохранить симуляцию в " + NETWORK_SIMULATION_FILE);
+        }
+    }
+
+    private void appendSimulationFromFile() {
+        File file = new File(NETWORK_SIMULATION_FILE);
+        if (!file.exists()) {
+            showAlert("Ошибка", "Файл " + NETWORK_SIMULATION_FILE + " не найден");
+            return;
+        }
+        try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(file))) {
+            SimulationState state = (SimulationState) ois.readObject();
+            Platform.runLater(() -> {
+                for (CarState carState : state.getCars()) {
+                    Car car = carState.createCar();
+                    habitat.getObjects().add(car);
+                    habitat.getCarAI().addObject(car);
+                    objectPane.getChildren().add(car.getImageView());
+                }
+                for (OilState oilState : state.getOils()) {
+                    Oil oil = oilState.createOil();
+                    habitat.getObjects().add(oil);
+                    habitat.getOilAI().addObject(oil);
+                    objectPane.getChildren().add(oil.getImageView());
+                }
+            });
+        } catch (IOException | ClassNotFoundException e) {
+            e.printStackTrace();
+            showAlert("Ошибка загрузки", "Не удалось загрузить объекты из " + NETWORK_SIMULATION_FILE);
         }
     }
 
