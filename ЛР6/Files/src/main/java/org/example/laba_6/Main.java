@@ -92,6 +92,9 @@ public class Main extends Application {
     private Button copySimulationButton;
     private Button appendSimulationButton;
 
+    // Automatically set server IP
+    private static final String SERVER_IP = "127.0.0.1";
+
     static {
         DecimalFormatSymbols symbols = new DecimalFormatSymbols();
         symbols.setDecimalSeparator('.');
@@ -103,6 +106,15 @@ public class Main extends Application {
     public void start(Stage stage) {
         try {
             System.out.println("Начало метода start");
+
+            // Show server selection dialog with pre-set IP
+            ServerInfo serverInfo = showServerSelectionDialog();
+            if (serverInfo == null) {
+                // User canceled the dialog, exit the application
+                System.out.println("Подключение отменено пользователем");
+                Platform.exit();
+                return;
+            }
 
             int x_size = 1040;
             int y_size = 1000;
@@ -294,7 +306,7 @@ public class Main extends Application {
                         } else {
                             output = "Неизвестная команда" + "\n";
                         }
-                        writer.write(output + "\n");
+                        writer.write(output);
                         writer.flush();
                     }
                 } catch (IOException e) {
@@ -357,7 +369,7 @@ public class Main extends Application {
             HBox aiControlPanel = new HBox(10);
             Button pauseCarAI = new Button("⏸ ИИ");
             Button resumeCarAI = new Button("▶ ИИ");
-            Button pauseOilAI = new Button("⏸ ИИ");
+            Button pauseOilAI = new Button("▶ ИИ");
             Button resumeOilAI = new Button("▶ ИИ");
 
             pauseCarAI.setOnAction(e -> Habitat.getInstance().setCarAIPaused(true));
@@ -587,7 +599,7 @@ public class Main extends Application {
 
             // Подключение к серверу асинхронно
             System.out.println("Запуск асинхронного подключения к серверу");
-            new Thread(this::connectToServer).start();
+            new Thread(() -> connectToServer(serverInfo.ip, serverInfo.port)).start();
 
             // Показ окна
             System.out.println("Отображение окна");
@@ -600,17 +612,107 @@ public class Main extends Application {
         }
     }
 
-    private void connectToServer() {
+    private ServerInfo showServerSelectionDialog() {
+        Dialog<ServerInfo> dialog = new Dialog<>();
+        dialog.setTitle("Выбор сервера");
+        dialog.setHeaderText("Введите порт сервера для подключения (IP: " + SERVER_IP + ")");
+
+        ButtonType connectButtonType = new ButtonType("Подключиться", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().addAll(connectButtonType, ButtonType.CANCEL);
+
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(10);
+        grid.setPadding(new Insets(20, 150, 10, 10));
+
+        TextField ipField = new TextField(SERVER_IP);
+        ipField.setEditable(false);
+        TextField portField = new TextField("");
+        Label statusLabel = new Label("Введите порт для проверки");
+
+        grid.add(new Label("IP-адрес:"), 0, 0);
+        grid.add(ipField, 1, 0);
+        grid.add(new Label("Порт:"), 0, 1);
+        grid.add(portField, 1, 1);
+        grid.add(statusLabel, 0, 2, 2, 1);
+
+        dialog.getDialogPane().setContent(grid);
+
+        Button connectButton = (Button) dialog.getDialogPane().lookupButton(connectButtonType);
+        connectButton.setDisable(true);
+
+        portField.textProperty().addListener((observable, oldValue, newValue) -> {
+            System.out.println("Port field changed to: '" + newValue + "'");
+            if (newValue.trim().isEmpty()) {
+                connectButton.setDisable(true);
+                statusLabel.setText("Порт не введён");
+                return;
+            }
+            try {
+                int port = Integer.parseInt(newValue.trim());
+                if (port < 0 || port > 65535) {
+                    connectButton.setDisable(true);
+                    statusLabel.setText("Порт должен быть в диапазоне 0-65535");
+                    return;
+                }
+                new Thread(() -> {
+                    try (Socket testSocket = new Socket()) {
+                        testSocket.connect(new java.net.InetSocketAddress(SERVER_IP, port), 1000);
+                        Platform.runLater(() -> {
+                            connectButton.setDisable(false);
+                            statusLabel.setText("Сервер доступен");
+                        });
+                    } catch (IOException e) {
+                        Platform.runLater(() -> {
+                            connectButton.setDisable(true);
+                            statusLabel.setText("Сервер недоступен: " + e.getMessage());
+                        });
+                    }
+                }).start();
+            } catch (NumberFormatException e) {
+                connectButton.setDisable(true);
+                statusLabel.setText("Некорректный формат порта");
+            }
+        });
+
+        dialog.setResultConverter(dialogButton -> {
+            if (dialogButton == connectButtonType) {
+                try {
+                    int port = Integer.parseInt(portField.getText().trim());
+                    return new ServerInfo(SERVER_IP, port);
+                } catch (NumberFormatException e) {
+                    showAlert("Ошибка", "Некорректный формат порта");
+                    return null;
+                }
+            }
+            return null;
+        });
+
+        return dialog.showAndWait().orElse(null);
+    }
+
+    private static class ServerInfo {
+        String ip;
+        int port;
+
+        ServerInfo(String ip, int port) {
+            this.ip = ip;
+            this.port = port;
+        }
+    }
+
+    private void connectToServer(String ip, int port) {
         try {
-            System.out.println("Попытка подключения к серверу");
-            clientSocket = new Socket("localhost", 12345);
+            System.out.println("Попытка подключения к серверу: " + ip + ":" + port);
+            clientSocket = new Socket(ip, port);
             socketOut = new PrintWriter(clientSocket.getOutputStream(), true);
             socketObjectIn = new ObjectInputStream(clientSocket.getInputStream());
             System.out.println("Подключено к серверу, запуск слушателя");
             startServerListener();
         } catch (IOException e) {
             e.printStackTrace();
-            Platform.runLater(() -> showAlert("Ошибка подключения", "Не удалось подключиться к серверу"));
+            Platform.runLater(() -> showAlert("Ошибка подключения",
+                    "Не удалось подключиться к серверу " + ip + ":" + port));
         }
     }
 
@@ -618,7 +720,6 @@ public class Main extends Application {
         try {
             isRunning = false; // Сигнализируем потоку слушателя о завершении
             if (socketOut != null) {
-                // Отправляем команду серверу на завершение (если сервер поддерживает)
                 socketOut.println("SHUTDOWN");
                 socketOut.flush();
                 socketOut.close();
@@ -663,14 +764,14 @@ public class Main extends Application {
                     } else if (inputLine.startsWith("REQUEST_APPEND_SIMULATION:")) {
                         System.out.println("Получен запрос добавления симуляции: " + inputLine);
                         sendSimulationState();
-                    } else if (inputLine.startsWith("SIMULATION_STATE:")) {
+                    } else if (inputLine.startsWith("SIMULATION_STATE:") || inputLine.startsWith("SIMULATION_STATE_APPEND:")) {
                         System.out.println("Получено состояние симуляции: " + inputLine);
                         String[] parts = inputLine.split(":");
                         int senderId = Integer.parseInt(parts[1]);
                         int dataLength = Integer.parseInt(parts[2]);
                         byte[] data = new byte[dataLength];
                         clientSocket.getInputStream().read(data);
-                        boolean isAppend = parts[0].equals("SIMULATION_STATE_APPEND");
+                        boolean isAppend = inputLine.startsWith("SIMULATION_STATE_APPEND:");
                         applySimulationState(data, isAppend);
                     } else {
                         System.out.println("Неизвестное сообщение: " + inputLine);

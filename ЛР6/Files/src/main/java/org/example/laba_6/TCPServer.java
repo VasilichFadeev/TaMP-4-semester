@@ -1,31 +1,54 @@
 package org.example.laba_6;
 
 import java.io.*;
-import java.net.ServerSocket;
-import java.net.Socket;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
+import java.net.*;
+import java.util.*;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 
 public class TCPServer {
-    private static final int PORT = 12345;
-    private static final List<ClientHandler> clients = new ArrayList<>();
+    private static final int START_PORT = 12345;
+    private static final int END_PORT = 12350; // Диапазон портов для поиска свободного
+    private static ServerSocket serverSocket;
+    private static final List<ClientHandler> clients = new CopyOnWriteArrayList<>();
 
     public static void main(String[] args) {
-        try (ServerSocket serverSocket = new ServerSocket(PORT)) {
-            System.out.println("Сервер запущен на порту " + PORT);
+        int selectedPort = findFreePort();
+        if (selectedPort == -1) {
+            System.err.println("Нет доступных портов в диапазоне " + START_PORT + "-" + END_PORT);
+            return;
+        }
+
+        try {
+            serverSocket = new ServerSocket(selectedPort, 0, InetAddress.getByName("0.0.0.0"));
+            System.out.println("Сервер запущен на порту " + selectedPort);
+
             while (true) {
                 Socket clientSocket = serverSocket.accept();
-                ClientHandler clientHandler = new ClientHandler(clientSocket);
-                clients.add(clientHandler);
-                new Thread(clientHandler).start();
-                System.out.println("Подключился клиент: " + clientHandler.getClientId());
+                ClientHandler handler = new ClientHandler(clientSocket);
+                clients.add(handler);
+                new Thread(handler).start();
+                System.out.println("Клиент подключён: " + handler.getClientId());
                 broadcastClientList();
             }
         } catch (IOException e) {
-            e.printStackTrace();
+            System.err.println("Ошибка при запуске сервера на порту " + selectedPort + ": " + e.getMessage());
         }
+    }
+
+    // Метод поиска первого свободного порта в диапазоне
+    private static int findFreePort() {
+        for (int port = START_PORT; port <= END_PORT; port++) {
+            try (ServerSocket ss = new ServerSocket()) {
+                ss.setReuseAddress(true);
+                ss.bind(new InetSocketAddress(port));
+                System.out.println("Найден свободный порт: " + port);
+                return port;
+            } catch (IOException e) {
+                System.out.println("Порт " + port + " занят, пробую следующий...");
+            }
+        }
+        return -1; // Нет свободных портов
     }
 
     static class ClientHandler implements Runnable {
@@ -33,18 +56,14 @@ public class TCPServer {
         private final String clientId;
         private final PrintWriter out;
         private final BufferedReader in;
-        private ObjectOutputStream objectOut;
+        private final ObjectOutputStream objectOut;
 
         public ClientHandler(Socket socket) throws IOException {
             this.socket = socket;
             this.clientId = UUID.randomUUID().toString();
             this.out = new PrintWriter(socket.getOutputStream(), true);
             this.in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            try {
-                this.objectOut = new ObjectOutputStream(socket.getOutputStream());
-            } catch (IOException e) {
-                System.err.println("Ошибка инициализации ObjectOutputStream для клиента " + clientId + ": " + e.getMessage());
-            }
+            this.objectOut = new ObjectOutputStream(socket.getOutputStream());
         }
 
         public String getClientId() {
@@ -63,20 +82,14 @@ public class TCPServer {
                     } else if (inputLine.startsWith("REQUEST_APPEND_SIMULATION:")) {
                         String targetClientId = inputLine.substring(25);
                         forwardSimulationRequest(targetClientId, true);
-                    } else if (inputLine.startsWith("SIMULATION_STATE:")) {
+                    } else if (inputLine.startsWith("SIMULATION_STATE:") || inputLine.startsWith("SIMULATION_STATE_APPEND:")) {
                         String[] parts = inputLine.split(":");
+                        boolean isAppend = inputLine.startsWith("SIMULATION_STATE_APPEND:");
                         int senderId = Integer.parseInt(parts[1]);
                         int dataLength = Integer.parseInt(parts[2]);
                         byte[] data = new byte[dataLength];
                         socket.getInputStream().read(data);
-                        forwardSimulationState(senderId, data, false);
-                    } else if (inputLine.startsWith("SIMULATION_STATE_APPEND:")) {
-                        String[] parts = inputLine.split(":");
-                        int senderId = Integer.parseInt(parts[1]);
-                        int dataLength = Integer.parseInt(parts[2]);
-                        byte[] data = new byte[dataLength];
-                        socket.getInputStream().read(data);
-                        forwardSimulationState(senderId, data, true);
+                        forwardSimulationState(senderId, data, isAppend);
                     }
                 }
             } catch (IOException e) {
@@ -110,7 +123,7 @@ public class TCPServer {
                         client.objectOut.write(data);
                         client.objectOut.flush();
                     } catch (IOException e) {
-                        System.err.println("Ошибка отправки состояния симуляции клиенту " + client.getClientId() + ": " + e.getMessage());
+                        System.err.println("Ошибка отправки состояния клиенту " + client.getClientId() + ": " + e.getMessage());
                     }
                 }
             }
