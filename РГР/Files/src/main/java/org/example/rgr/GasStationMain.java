@@ -1,4 +1,4 @@
-package org.example.rgr;
+package com.example.rgr;
 
 import javafx.application.Application;
 import javafx.application.Platform;
@@ -16,33 +16,33 @@ import java.net.Socket;
 
 public class GasStationMain extends Application {
 
-    private GasStationController controller;
+    private GasStationController controller; // контроллер для управления логикой приложения
 
     @Override
     public void start(Stage primaryStage) {
-        // Инициализируем контроллер
+        // инициализируем контроллер
         controller = new GasStationController();
 
-        // Создаём UI вручную
+        // создаём UI вручную
         VBox root = createUI();
 
-        // Создаём сцену
+        // создаём сцену
         Scene scene = new Scene(root, 800, 600);
         primaryStage.setTitle("Заправочная станция");
         primaryStage.setScene(scene);
 
-        // Показываем диалог для ввода IP и порта
+        // показываем диалог для ввода IP и порта
         ServerInfo serverInfo = showServerSelectionDialog(primaryStage);
         if (serverInfo == null) {
             Platform.exit();
             return;
         }
 
-        // Устанавливаем информацию о сервере и инициализируем контроллер
+        // устанавливаем информацию о сервере и инициализируем контроллер
         controller.setServerInfo(serverInfo.ip, serverInfo.port);
         controller.initialize();
 
-        // Обработчик закрытия окна
+        // обработчик закрытия окна
         primaryStage.setOnCloseRequest(event -> {
             controller.shutdown();
             Platform.exit();
@@ -56,11 +56,11 @@ public class GasStationMain extends Application {
         VBox root = new VBox(10);
         root.setPadding(new Insets(10));
 
-        // Заголовок
+        // заголовок
         Text title = new Text("Заправочная станция");
         title.setFont(Font.font("System", 20));
 
-        // Панель кнопок
+        // панель кнопок
         HBox buttonBox = new HBox(10);
         Button addCarButton = new Button("Добавить машину");
         Button refillAllButton = new Button("Пополнить все колонки");
@@ -68,7 +68,7 @@ public class GasStationMain extends Application {
         Button addRemoteCarButton = new Button("Добавить машину удалённо");
         buttonBox.getChildren().addAll(addCarButton, refillAllButton, requestStateButton, addRemoteCarButton);
 
-        // Область статуса
+        // область статуса
         Text statusLabel = new Text("Статус:");
         statusLabel.setFont(Font.font("System", 14));
         TextArea statusArea = new TextArea();
@@ -76,25 +76,25 @@ public class GasStationMain extends Application {
         statusArea.setWrapText(true);
         statusArea.setPrefHeight(200);
 
-        // Панель колонок
+        // панель колонок
         Text pumpsLabel = new Text("Колонки:");
         pumpsLabel.setFont(Font.font("System", 14));
         HBox pumpsContainer = new HBox(20);
         pumpsContainer.setAlignment(Pos.CENTER);
 
-        // Очередь машин
+        // очередь машин
         Text queueLabel = new Text("Очередь машин:");
         queueLabel.setFont(Font.font("System", 14));
         ListView<String> queueList = new ListView<>();
         queueList.setPrefHeight(100);
 
-        // Список подключённых клиентов
+        // список подключённых клиентов
         Text clientsLabel = new Text("Подключенные клиенты:");
         clientsLabel.setFont(Font.font("System", 14));
         ListView<String> clientsList = new ListView<>();
         clientsList.setPrefHeight(100);
 
-        // Добавляем элементы в корневой контейнер
+        // добавляем элементы в корневой контейнер
         root.getChildren().addAll(
                 title,
                 buttonBox,
@@ -112,7 +112,7 @@ public class GasStationMain extends Application {
                 clientsList
         );
 
-        // Привязываем элементы к контроллеру (имитация FXML-инъекции)
+        // привязываем элементы к контроллеру (имитация FXML-инъекции)
         controller.setStatusArea(statusArea);
         controller.setPumpsContainer(pumpsContainer);
         controller.setQueueList(queueList);
@@ -120,7 +120,7 @@ public class GasStationMain extends Application {
         controller.setRequestStateButton(requestStateButton);
         controller.setAddRemoteCarButton(addRemoteCarButton);
 
-        // Привязываем действия кнопок к методам контроллера
+        // привязываем действия кнопок к методам контроллера
         addCarButton.setOnAction(event -> controller.addCar());
         refillAllButton.setOnAction(event -> controller.refillAll());
 
@@ -128,8 +128,8 @@ public class GasStationMain extends Application {
     }
 
     private static class ServerInfo {
-        String ip;
-        int port;
+        String ip; // IP-адрес сервера
+        int port; // порт сервера
 
         ServerInfo(String ip, int port) {
             this.ip = ip;
@@ -142,7 +142,7 @@ public class GasStationMain extends Application {
         dialog.setTitle("Подключение к серверу");
         dialog.setHeaderText("Введите IP-адрес и порт сервера");
 
-        // Устанавливаем владельца после создания сцены
+        // устанавливаем владельца после создания сцены
         if (owner.getScene() != null) {
             dialog.initOwner(owner);
         }
@@ -241,6 +241,6 @@ public class GasStationMain extends Application {
     }
 
     public static void main(String[] args) {
-        launch(args);
+        launch(args); // запуск JavaFX-приложения
     }
 }
